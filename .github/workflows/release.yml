@@ -1,0 +1,74 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux]
+        goarch: [amd64, arm64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          check-latest: true
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Build fins (CLI)
+        run: |
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+          go build -ldflags="-s -w" -o dist/fins-${{ matrix.goos }}-${{ matrix.goarch }} cmd/fins/main.go
+
+      - name: Build finsd (Daemon)
+        run: |
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+          go build -ldflags="-s -w" -o dist/finsd-${{ matrix.goos }}-${{ matrix.goarch }} cmd/finsd/main.go
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.goarch }}
+          path: dist/*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-binaries
+          merge-multiple: true
+
+      - name: Display structure of downloaded files
+        run: ls -R all-binaries
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            all-binaries/fins-linux-amd64
+            all-binaries/finsd-linux-amd64
+            all-binaries/fins-linux-arm64
+            all-binaries/finsd-linux-arm64
+          generate_release_notes: true
+          draft: false
+          prerelease: false

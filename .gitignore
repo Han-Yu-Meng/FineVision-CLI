@@ -1,0 +1,33 @@
+# Binaries
+fins
+finsd
+!cmd/*
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Logs
+*.log
+finsd.log
+
+# Test artifacts
+*.test
+*.out
+
+# Go
+vendor/
+go.work
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Temporary build artifacts (if any local)
+build/
+dist/
+
+code_collector.py
+code_collector.md

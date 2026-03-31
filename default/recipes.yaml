@@ -1,0 +1,201 @@
+recipes:
+  Eigen3:
+    git: "https://gitlab.com/libeigen/eigen.git"
+    build_system: "cmake"
+    cmake_args:
+      - "-DBUILD_TESTING=OFF"
+      - "-DEIGEN_BUILD_DOC=OFF"
+      - "-DEIGEN_BUILD_PKGCONFIG=OFF"
+      - "-DCMAKE_BUILD_TYPE=Release"
+    versions:
+      "3.4.0":
+        tag: "3.4.0"
+      "3.3.9":
+        tag: "3.3.9"
+
+  Sophus:
+    git: "https://github.com/strasdat/Sophus.git"
+    build_system: "cmake"
+    cmake_args:
+      - "-DBUILD_SOPHUS_TESTS=OFF"
+      - "-DBUILD_SOPHUS_EXAMPLES=OFF"
+      - "-DSOPHUS_USE_BASIC_LOGGING=ON"
+    versions:
+      "1.2.2":
+        tag: "v1.2.2"
+      "1.0.0":
+        tag: "v1.0.0"
+
+  yaml-cpp:
+    git: "https://github.com/jbeder/yaml-cpp.git"
+    build_system: "cmake"
+    cmake_args:
+      - "-DYAML_CPP_BUILD_TESTS=OFF"
+      - "-DYAML_CPP_BUILD_TOOLS=OFF"
+      - "-DYAML_CPP_BUILD_CONTRIB=OFF"
+      - "-DBUILD_SHARED_LIBS=ON"
+    versions:
+      "0.7.0":
+        tag: "yaml-cpp-0.7.0"
+      "0.6.0":
+        tag: "yaml-cpp-0.6.0"
+
+  fmt:
+    git: "https://github.com/fmtlib/fmt.git"
+    build_system: "cmake"
+    cmake_args:
+      - "-DFMT_TEST=OFF"
+      - "-DFMT_DOC=OFF"
+      - "-DBUILD_SHARED_LIBS=ON"
+    versions:
+      "9.1.0":
+        tag: "9.1.0"
+      "8.1.1":
+        tag: "8.1.1"
+
+  spdlog:
+    git: "https://github.com/gabime/spdlog.git"
+    build_system: "cmake"
+    cmake_args:
+      - "-DSPDLOG_BUILD_TESTS=OFF"
+      - "-DSPDLOG_BUILD_EXAMPLE=OFF"
+      - "-DSPDLOG_FMT_EXTERNAL=ON"
+      - "-DBUILD_SHARED_LIBS=ON"
+    versions:
+      "1.11.0":
+        tag: "v1.11.0"
+      "1.10.0":
+        tag: "v1.10.0"
+
+  glog:
+    git: "https://github.com/google/glog.git"
+    build_system: "cmake"
+    cmake_args:
+      - "-DBUILD_TESTING=OFF"
+      - "-DWITH_GFLAGS=OFF"
+      - "-DBUILD_SHARED_LIBS=ON"
+    versions:
+      "0.6.0":
+        tag: "v0.6.0"
+      "0.5.0":
+        tag: "v0.5.0"
+
+  Ceres:
+      git: "https://github.com/ceres-solver/ceres-solver.git"
+      build_system: "cmake"
+      cmake_args:
+        - "-DBUILD_TESTING=OFF"
+        - "-DMINIGLOG=ON"
+        - "-DLOGGING=OFF"
+      versions:
+        "2.1.0":
+          tag: "2.1.0"
+        
+        "1.14.0":
+          # git: "https://github.com/Han-Yu-Meng/ceres-solver.git"
+          tag: "1.14.0"
+          cmake_args:
+            - "-DSUITESPARSE=OFF"
+            - "-DCMAKE_CXX_STANDARD=14"
+            - "-DTBB=OFF"
+            - "-DCMAKE_CXX_FLAGS=-Wno-error=unused-parameter"
+
+  MagicEnum:
+    git: "https://github.com/Neargye/magic_enum.git"
+    build_system: "cmake"
+    cmake_args:
+      - "-DMAGIC_ENUM_OPT_BUILD_EXAMPLES=OFF"
+      - "-DMAGIC_ENUM_OPT_BUILD_TESTS=OFF"
+    versions:
+      "0.9.0":
+        tag: "v0.9.0"
+
+  small_gicp:
+    git: "https://github.com/koide3/small_gicp.git"
+    build_system: "cmake"
+    versions:
+      "1.0.0":
+        tag: "v1.0.0"
+  
+  octomap:
+    git: "https://github.com/OctoMap/octomap.git"
+    build_system: "cmake"
+    cmake_args:
+      - "-DCMAKE_BUILD_TYPE=Release"
+    versions:
+      "1.10.0":
+        tag: "1.10.0"
+      "1.9.0":
+        tag: "1.9.0"
+
+  nav_msgs:
+    type: "system"
+    system_pkg: "ros-${ROS_DISTRO}-nav-msgs"
+
+  sensor_msgs:
+    type: "system"
+    system_pkg: "ros-${ROS_DISTRO}-sensor-msgs"
+
+  geometry_msgs:
+    type: "system"
+    system_pkg: "ros-${ROS_DISTRO}-geometry-msgs"
+
+  visualization_msgs:
+    type: "system"
+    system_pkg: "ros-${ROS_DISTRO}-visualization-msgs"
+
+  std_msgs:
+    type: "system"
+    system_pkg: "ros-${ROS_DISTRO}-std-msgs"
+
+  tf2_ros:
+    type: "system"
+    system_pkg: "ros-${ROS_DISTRO}-tf2-ros"
+
+  tf2:
+    type: "system"
+    system_pkg: "ros-${ROS_DISTRO}-tf2"
+
+  tf2_eigen:
+    type: "system"
+    system_pkg: "ros-${ROS_DISTRO}-tf2-eigen"
+  
+  tf2_geometry_msgs:
+    type: "system"
+    system_pkg: "ros-${ROS_DISTRO}-tf2-geometry-msgs"
+
+  pcl_conversions:
+    type: "system"
+    system_pkg: "ros-${ROS_DISTRO}-pcl-conversions"
+
+  PCL:
+    type: "system"
+    system_pkg: "libpcl-dev"
+  
+  OpenCV:
+    type: "system"
+    system_pkg: "libopencv-dev"
+
+  cv_bridge:
+    type: "system"
+    system_pkg: "ros-${ROS_DISTRO}-cv-bridge"
+
+  rclcpp:
+    type: "system"
+    system_pkg: "ros-${ROS_DISTRO}-rclcpp"
+
+  OpenMP:
+    type: "system"
+    system_pkg: "libomp-dev"
+
+  OpenGL:
+    type: "system"
+    system_pkg: "libgl1-mesa-dev"
+  
+  glfw3:
+    type: "system"
+    system_pkg: "libglfw3-dev"
+  
+  glew:
+    type: "system"
+    system_pkg: "libglew-dev"

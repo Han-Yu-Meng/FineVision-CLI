@@ -1,0 +1,30 @@
+build:
+    default_preset: release
+    defaults:
+        build_jobs: 8
+        build_output: ~/.fins/install
+        cmake_generator: Ninja
+        enable_native_arch: true
+        linker: auto
+        sdk_path: ~/FineVision/sdk
+        verbose: false
+    presets:
+        dev:
+            description: Development mode
+            build_type: Debug
+            cmake_args:
+                - -DBUILD_TESTS=ON
+            sanitize: none
+        release:
+            description: Release mode
+            build_type: Release
+            sanitize: none
+            verbose: true
+        simulate:
+            description: Simulation mode
+            build_type: RelWithDebInfo
+            sanitize: none
+local_packages: []
+webui:
+    host: http://localhost:8080
+    token: FINS
