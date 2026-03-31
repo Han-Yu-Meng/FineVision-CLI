@@ -42,19 +42,27 @@ sudo apt-get install -y ninja-build build-essential curl jq wget
 log_success "System dependencies installed successfully."
 
 # 4. Get the latest version of binary files from GitHub
-log_info "Querying the latest Release version from GitHub..."
+log_info "Querying the Release version from GitHub..."
 
-# Get the API for the latest release
+# Try to get the latest stable release, fallback to include pre-releases (for 'latest' tag)
 API_URL="https://api.github.com/repos/$GITHUB_USER/$GITHUB_REPO/releases/latest"
 LATEST_RELEASE=$(curl -s "$API_URL")
 
+# If 'latest' API returns 404 or empty (often happens with Pre-releases only), try the 'tags/latest' or most recent release
+if echo "$LATEST_RELEASE" | grep -q "Not Found"; then
+    log_info "Latest stable release not found, trying specified tag or pre-release..."
+    API_URL="https://api.github.com/repos/$GITHUB_USER/$GITHUB_REPO/releases/tags/latest"
+    LATEST_RELEASE=$(curl -s "$API_URL")
+fi
+
 # Parse download links
-FINS_URL=$(echo "$LATEST_RELEASE" | jq -r '.assets[] | select(.name | test("fins-linux-amd64|fins$")) | .browser_download_url' | head -n 1)
-FINSD_URL=$(echo "$LATEST_RELEASE" | jq -r '.assets[] | select(.name | test("finsd-linux-amd64|finsd$")) | .browser_download_url' | head -n 1)
+FINS_URL=$(echo "$LATEST_RELEASE" | jq -r '.assets[]? | select(.name | test("fins-linux-amd64|fins$")) | .browser_download_url' | head -n 1)
+FINSD_URL=$(echo "$LATEST_RELEASE" | jq -r '.assets[]? | select(.name | test("finsd-linux-amd64|finsd$")) | .browser_download_url' | head -n 1)
 
 if [ -z "$FINS_URL" ] || [ -z "$FINSD_URL" ]; then
-    log_error "Could not find binary files in the latest Release of $GITHUB_USER/$GITHUB_REPO."
-    log_warn "Please check if your GitHub Release asset names contain 'fins' and 'finsd'."
+    log_error "Could not find binary files in the Release."
+    log_warn "Current API URL used: $API_URL"
+    log_warn "If this is a new repository, please ensure at least one GitHub Release exists with assets."
     exit 1
 fi
 
