@@ -199,3 +199,7 @@ recipes:
   glew:
     type: "system"
     system_pkg: "libglew-dev"
+
+  gflags:
+    type: "system"
+    system_pkg: "libgflags-dev"
