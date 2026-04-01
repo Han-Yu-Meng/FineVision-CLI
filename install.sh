@@ -6,7 +6,7 @@ GITHUB_USER="Han-Yu-Meng"
 GITHUB_REPO="fins-cli"
 BRANCH="main"
 
-GH_PROXY="https://ghp.ci/"
+GH_PROXY="https://gh-proxy.com/"
 
 # Define color output
 GREEN='\033[0;32m'
@@ -79,9 +79,16 @@ if [ -z "$FINS_URL" ] || [ -z "$FINSD_URL" ]; then
 fi
 
 log_info "Downloading fins : $FINS_URL"
-sudo curl -sL "$FINS_URL" -o /usr/local/bin/fins
+if ! sudo curl -L "$FINS_URL" -o /usr/local/bin/fins; then
+    log_error "Failed to download fins from $FINS_URL"
+    exit 1
+fi
+
 log_info "Downloading finsd: $FINSD_URL"
-sudo curl -sL "$FINSD_URL" -o /usr/local/bin/finsd
+if ! sudo curl -L "$FINSD_URL" -o /usr/local/bin/finsd; then
+    log_error "Failed to download finsd from $FINSD_URL"
+    exit 1
+fi
 
 # Grant execution permissions
 sudo chmod +x /usr/local/bin/fins
