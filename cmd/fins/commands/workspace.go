@@ -137,7 +137,27 @@ var workspaceRemoveCmd = &cobra.Command{
 	},
 }
 
+var workspaceScanCmd = &cobra.Command{
+	Use:   "scan",
+	Short: "Manually trigger a scan of all registered workspaces",
+	Run: func(cmd *cobra.Command, args []string) {
+		url := fmt.Sprintf("%s/api/scan", DaemonURL)
+		resp, err := http.Post(url, "application/json", nil)
+		if err != nil {
+			utils.LogError(os.Stdout, "Failed to connect to finsd: %v", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == 200 {
+			utils.LogSuccess(os.Stdout, "Package scan triggered successfully.")
+		} else {
+			utils.LogError(os.Stdout, "Failed to trigger scan: Daemon returned %d", resp.StatusCode)
+		}
+	},
+}
+
 func init() {
-	workspaceCmd.AddCommand(workspaceAddCmd, workspaceListCmd, workspaceRemoveCmd)
+	workspaceCmd.AddCommand(workspaceAddCmd, workspaceListCmd, workspaceRemoveCmd, workspaceScanCmd)
 	RootCmd.AddCommand(workspaceCmd)
 }
