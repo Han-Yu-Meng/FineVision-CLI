@@ -98,22 +98,22 @@ func runCommandWithColor(cmd *exec.Cmd, writer io.Writer) error {
 	}
 
 	// 并发读取 stdout 和 stderr
-	done := make(chan error, 2)
+	done := make(chan bool, 2)
 	go func() {
-		_, err := io.Copy(writer, stdout)
-		done <- err
+		io.Copy(writer, stdout)
+		done <- true
 	}()
 	go func() {
-		_, err := io.Copy(writer, stderr)
-		done <- err
+		io.Copy(writer, stderr)
+		done <- true
 	}()
 
 	// 等待命令完成
 	cmdErr := cmd.Wait()
+
 	<-done
 	<-done
 
-	// 确保刷新
 	if f, ok := writer.(interface{ Flush() }); ok {
 		f.Flush()
 	}

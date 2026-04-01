@@ -134,7 +134,9 @@ func (iw *IndentedWriter) Write(p []byte) (n int, err error) {
 
 		fmt.Fprintf(iw.Target, "%s%s\n", iw.Prefix, finalOutput)
 
-		iw.Flush()
+		if f, ok := iw.Target.(interface{ Flush() }); ok {
+			f.Flush()
+		}
 	}
 
 	return len(p), nil
