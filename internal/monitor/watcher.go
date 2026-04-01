@@ -6,11 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	
-	"github.com/fsnotify/fsnotify"
-	"github.com/spf13/viper"
+
 	"finsd/internal/core"
 	"finsd/internal/types"
+
+	"github.com/fsnotify/fsnotify"
+	"github.com/spf13/viper"
 )
 
 type PackageWatcher struct {
@@ -24,7 +25,7 @@ func NewWatcher() (*PackageWatcher, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &PackageWatcher{
 		watcher: w,
 		cache:   make(map[string]*types.Package),
@@ -38,10 +39,14 @@ func (pw *PackageWatcher) Start() {
 		for {
 			select {
 			case event, ok := <-pw.watcher.Events:
-				if !ok { return }
+				if !ok {
+					return
+				}
 				pw.handleEvent(event)
 			case err, ok := <-pw.watcher.Errors:
-				if !ok { return }
+				if !ok {
+					return
+				}
 				log.Println("Watcher error:", err)
 			}
 		}
@@ -59,7 +64,9 @@ func (pw *PackageWatcher) setupWatchers() {
 	searchPaths := viper.GetStringSlice("package_search_paths")
 	for _, root := range searchPaths {
 		filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-			if err != nil { return nil }
+			if err != nil {
+				return nil
+			}
 			if d.IsDir() {
 				if strings.HasPrefix(d.Name(), ".") && d.Name() != "." {
 					return filepath.SkipDir
@@ -102,10 +109,10 @@ func (pw *PackageWatcher) handleEvent(event fsnotify.Event) {
 	}
 
 	if strings.HasSuffix(event.Name, "package.yaml") {
-		if event.Op&fsnotify.Write == fsnotify.Write || 
-		   event.Op&fsnotify.Create == fsnotify.Create ||
-		   event.Op&fsnotify.Rename == fsnotify.Rename ||
-		   event.Op&fsnotify.Remove == fsnotify.Remove {
+		if event.Op&fsnotify.Write == fsnotify.Write ||
+			event.Op&fsnotify.Create == fsnotify.Create ||
+			event.Op&fsnotify.Rename == fsnotify.Rename ||
+			event.Op&fsnotify.Remove == fsnotify.Remove {
 			pw.reloadPackage(filepath.Dir(event.Name), event.Name)
 			return
 		}
@@ -132,6 +139,9 @@ func (pw *PackageWatcher) reloadPackage(dir, metaPath string) {
 }
 
 func (pw *PackageWatcher) Rescan() {
+	// Re-initialize watchers for any new workspace paths
+	pw.setupWatchers()
+
 	pkgs, err := core.ScanPackages()
 	if err == nil {
 		pw.mutex.Lock()
@@ -197,4 +207,3 @@ func getMaintainer(p *types.Package) string {
 	}
 	return ""
 }
-
