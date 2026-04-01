@@ -7,21 +7,19 @@ import (
 )
 
 func StreamResponse(reader io.Reader) error {
-	scanner := bufio.NewScanner(reader)
-	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, 1024*1024)
-
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		os.Stdout.Write(line)
-		os.Stdout.Write([]byte("\n"))
-
-		os.Stdout.Sync()
+	// 使用 bufio.Reader 逐字节或按行读取，不使用 Scanner 避免缓冲区过大的问题
+	r := bufio.NewReader(reader)
+	for {
+		line, err := r.ReadBytes('\n')
+		if len(line) > 0 {
+			os.Stdout.Write(line)
+			os.Stdout.Sync()
+		}
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
 	}
-
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
-	return nil
 }
