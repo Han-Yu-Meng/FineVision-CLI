@@ -23,9 +23,6 @@ func main() {
 		utils.LogSuccess(os.Stdout, "Using config file: %s", viper.ConfigFileUsed())
 	}
 
-	// 创建日志目录
-	os.MkdirAll("logs", 0755)
-
 	// 初始化包监视器
 	var err error
 	handlers.PackageWatcher, err = monitor.NewWatcher()
