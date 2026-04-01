@@ -37,6 +37,18 @@ if [ "$EUID" -ne 0 ]; then
   sudo -v
 fi
 
+# 2.5 Stop and Cleanup existing finsd
+log_info "Stopping existing finsd service and processes..."
+if systemctl is-active --quiet finsd; then
+    sudo systemctl stop finsd
+    log_info "finsd service stopped."
+fi
+
+if pgrep -x "finsd" > /dev/null; then
+    sudo pkill -9 -x "finsd"
+    log_info "Terminated active finsd processes."
+fi
+
 # 3. Install system dependencies
 log_info "Installing system dependencies"
 sudo apt-get update -y
