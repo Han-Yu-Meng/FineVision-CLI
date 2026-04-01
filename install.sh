@@ -26,7 +26,15 @@ if [ -n "$SUDO_USER" ]; then
 else
     REAL_USER="$USER"
 fi
-REAL_HOME=$(eval echo "~$REAL_USER")
+
+# More reliable way to get the actual logged-in user
+if [ "$REAL_USER" = "root" ] || [ -z "$REAL_USER" ]; then
+    REAL_USER=$(logname 2>/dev/null || echo "$SUDO_USER")
+fi
+if [ -z "$REAL_USER" ]; then
+    REAL_USER=$(who | awk '{print $1}' | head -n 1)
+fi
+REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 
 log_info "Current installation target user: $REAL_USER, Directory: $REAL_HOME"
 
@@ -120,6 +128,8 @@ RECIPE_URL="${GH_PROXY}https://raw.githubusercontent.com/$GITHUB_USER/$GITHUB_RE
 sudo -u "$REAL_USER" curl -sL "$CONFIG_URL" -o "$FINS_DIR/config.yaml"
 sudo -u "$REAL_USER" curl -sL "$RECIPE_URL" -o "$FINS_DIR/recipes.yaml"
 
+sudo chown -R "$REAL_USER":"$REAL_USER" "$FINS_DIR"
+
 log_success "Configuration files download complete."
 
 # 6. Configure systemd background service
@@ -149,6 +159,8 @@ Restart=always
 RestartSec=3
 Environment="HOME=$REAL_HOME"
 Environment="USER=$REAL_USER"
+Environment="LANG=en_US.UTF-8"
+Environment="LC_ALL=en_US.UTF-8"
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 [Install]

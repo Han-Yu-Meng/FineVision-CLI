@@ -4,6 +4,7 @@ package commands
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -21,7 +22,8 @@ func Execute() {
 }
 
 func init() {
-	viper.AddConfigPath("$HOME/.fins")
+	home, _ := os.UserHomeDir()
+	viper.AddConfigPath(filepath.Join(home, ".fins"))
 	viper.AddConfigPath(".")
 
 	viper.SetConfigName("config")

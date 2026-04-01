@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 
 	"finsd/internal/monitor"
 	"finsd/internal/server"
@@ -14,7 +15,8 @@ import (
 
 func main() {
 	// 初始化配置
-	viper.AddConfigPath("$HOME/.fins")
+	home, _ := os.UserHomeDir()
+	viper.AddConfigPath(filepath.Join(home, ".fins"))
 	viper.AddConfigPath(".")
 	viper.SetConfigName("config")
 	if err := viper.ReadInConfig(); err != nil {
