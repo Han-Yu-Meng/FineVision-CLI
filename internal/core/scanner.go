@@ -60,6 +60,17 @@ func ScanPackages() (map[string]*types.Package, error) {
 			if err != nil {
 				return nil
 			}
+
+			// Don't scan into hidden directories
+			if d.IsDir() && strings.HasPrefix(d.Name(), ".") && d.Name() != "." {
+				return filepath.SkipDir
+			}
+
+			// Don't scan into known build/temp directories
+			if d.IsDir() && (d.Name() == "build" || d.Name() == "devel" || d.Name() == "install") {
+				return filepath.SkipDir
+			}
+
 			if !d.IsDir() && d.Name() == "package.yaml" {
 				pkgPath := filepath.Dir(path)
 				pkg := LoadPackage(pkgPath, path)
@@ -67,8 +78,9 @@ func ScanPackages() (map[string]*types.Package, error) {
 					pkg.Source = sourceName
 					// Store raw package with just the short name first
 					rawPkgs[pkg.Meta.Name] = append(rawPkgs[pkg.Meta.Name], pkg)
-					return filepath.SkipDir
 				}
+				// Stop scanning deeper once a package.yaml is found in this directory
+				return filepath.SkipDir
 			}
 			return nil
 		})

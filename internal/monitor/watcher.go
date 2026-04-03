@@ -74,9 +74,21 @@ func (pw *PackageWatcher) setupWatchers() {
 				return nil
 			}
 			if d.IsDir() {
+				// Don't watch hidden directories
 				if strings.HasPrefix(d.Name(), ".") && d.Name() != "." {
 					return filepath.SkipDir
 				}
+
+				// Only watch the root and its direct subdirectories (package directories)
+				// Do not watch build/ or other deep subdirectories
+				rel, _ := filepath.Rel(root, path)
+				if rel != "." {
+					parts := strings.Split(rel, string(filepath.Separator))
+					if len(parts) > 1 {
+						return filepath.SkipDir
+					}
+				}
+
 				_ = pw.watcher.Add(path)
 			}
 			return nil
@@ -88,10 +100,26 @@ func (pw *PackageWatcher) handleEvent(event fsnotify.Event) {
 	if event.Op&fsnotify.Create == fsnotify.Create {
 		info, err := os.Stat(event.Name)
 		if err == nil && info.IsDir() {
-			log.Println("New directory found, watching:", event.Name)
-			pw.watcher.Add(event.Name)
-			// Trigger reload to check if this new directory contains a package
-			pw.reloadPackage(event.Name, "directory created")
+			// Only watch if it's a direct child of a managed workspace root
+			isRootChild := false
+			var localSources []struct {
+				Name string `mapstructure:"name"`
+				Path string `mapstructure:"path"`
+			}
+			_ = viper.UnmarshalKey("local_packages", &localSources)
+			for _, src := range localSources {
+				parent := filepath.Dir(event.Name)
+				if parent == src.Path {
+					isRootChild = true
+					break
+				}
+			}
+
+			if isRootChild {
+				log.Println("New package directory found, watching:", event.Name)
+				pw.watcher.Add(event.Name)
+				pw.reloadPackage(event.Name, "directory created")
+			}
 			return
 		}
 	}
