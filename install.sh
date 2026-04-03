@@ -53,7 +53,14 @@ fi
 # 3. Install system dependencies
 log_info "Installing system dependencies"
 sudo apt-get update -y
-sudo apt-get install -y ninja-build build-essential curl jq wget mold
+
+# Detect OS version for mold compatibility (available in Ubuntu 22.04+)
+UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "0.0")
+if (( $(echo "$UBUNTU_VERSION >= 22.04" | bc -l) )); then
+    sudo apt-get install -y ninja-build build-essential curl jq wget mold
+else
+    sudo apt-get install -y ninja-build build-essential curl jq wget
+fi
 log_success "System dependencies installed successfully."
 
 # 4. Get the latest version of binary files from GitHub
