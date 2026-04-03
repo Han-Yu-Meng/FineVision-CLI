@@ -53,7 +53,7 @@ fi
 # 3. Install system dependencies
 log_info "Installing system dependencies"
 sudo apt-get update -y
-sudo apt-get install -y ninja-build build-essential curl jq wget
+sudo apt-get install -y ninja-build build-essential curl jq wget mold
 log_success "System dependencies installed successfully."
 
 # 4. Get the latest version of binary files from GitHub

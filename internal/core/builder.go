@@ -167,6 +167,8 @@ func CompilePackageStream(pkgName string, rawWriter io.Writer) error {
 cmake_minimum_required(VERSION 3.16)
 project(fins_wrapper)
 
+find_package(Threads REQUIRED)
+
 set(FINS_DEP_PATHS "%s")
 if(FINS_DEP_PATHS)
 	list(INSERT CMAKE_PREFIX_PATH 0 ${FINS_DEP_PATHS})
@@ -244,9 +246,9 @@ endif()
 
 	if _, err := exec.LookPath("mold"); err == nil {
 		args = append(args,
-			"-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold",
-			"-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=mold",
-			"-DCMAKE_MODULE_LINKER_FLAGS=-fuse-ld=mold",
+			"-DCMAKE_EXE_LINKER_FLAGS=-B/usr/local/libexec/mold",
+			"-DCMAKE_SHARED_LINKER_FLAGS=-B/usr/local/libexec/mold",
+			"-DCMAKE_MODULE_LINKER_FLAGS=-B/usr/local/libexec/mold",
 		)
 	}
 
@@ -357,7 +359,7 @@ endif()
 	}
 
 	if _, err := exec.LookPath("mold"); err == nil {
-		args = append(args, "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold")
+		args = append(args, "-DCMAKE_EXE_LINKER_FLAGS=-B/usr/local/libexec/mold")
 	}
 
 	utils.LogSection(writer, "Configuring %s (Type: %s)", name, buildType)
