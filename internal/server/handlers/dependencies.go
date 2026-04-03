@@ -115,12 +115,15 @@ func GetRecipe(c *gin.Context) {
 
 	rosDistro := os.Getenv("ROS_DISTRO")
 	if rosDistro == "" {
-		if _, err := os.Stat("/opt/ros/jazzy"); err == nil {
-			rosDistro = "jazzy"
-		} else if _, err := os.Stat("/opt/ros/humble"); err == nil {
+		distros := []string{"jazzy", "humble", "iron", "galactic", "foxy"}
+		for _, d := range distros {
+			if _, err := os.Stat("/opt/ros/" + d); err == nil {
+				rosDistro = d
+				break
+			}
+		}
+		if rosDistro == "" {
 			rosDistro = "humble"
-		} else {
-			rosDistro = "jazzy"
 		}
 	}
 

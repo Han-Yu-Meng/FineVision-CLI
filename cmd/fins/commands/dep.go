@@ -157,12 +157,16 @@ func resolveSystemPackage(libName string, localRecipes map[string]types.Dependen
 	if pkgName != "" && strings.Contains(pkgName, "${ROS_DISTRO}") {
 		rosDistro := os.Getenv("ROS_DISTRO")
 		if rosDistro == "" {
-			if _, err := os.Stat("/opt/ros/jazzy"); err == nil {
-				rosDistro = "jazzy"
-			} else if _, err := os.Stat("/opt/ros/humble"); err == nil {
+			distros := []string{"jazzy", "humble", "iron", "galactic", "foxy"}
+			for _, d := range distros {
+				if _, err := os.Stat("/opt/ros/" + d); err == nil {
+					rosDistro = d
+					break
+				}
+			}
+			if rosDistro == "" {
+				utils.LogWarning(os.Stdout, "ROS_DISTRO not set and no common ROS distros found. Defaulting to 'humble'.")
 				rosDistro = "humble"
-			} else {
-				rosDistro = "jazzy"
 			}
 		}
 		pkgName = strings.ReplaceAll(pkgName, "${ROS_DISTRO}", rosDistro)
