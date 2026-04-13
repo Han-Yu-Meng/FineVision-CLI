@@ -35,7 +35,7 @@ func StreamResponseWithMessage(reader io.Reader, message string) error {
 			case <-ticker.C:
 				elapsed := time.Since(startTime)
 				// 模拟 utils.LogSection 的提示风格，但保持在行首刷新
-				fmt.Printf("\r\033[K%s %s %s", infoColor(">"), infoColor(message), dimColor(fmt.Sprintf("(%.1fs)", elapsed.Seconds())))
+				fmt.Printf("\r\033[K%s %s %s", infoColor("> "), infoColor(message), dimColor(fmt.Sprintf("(%.1fs)", elapsed.Seconds())))
 			}
 		}
 	}()
