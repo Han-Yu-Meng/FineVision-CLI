@@ -96,7 +96,7 @@ func runAgent(debug bool) {
 		return
 	}
 
-	client.StreamResponse(resp.Body)
+	client.StreamResponseWithMessage(resp.Body, "Agent Running...")
 }
 
 func init() {
