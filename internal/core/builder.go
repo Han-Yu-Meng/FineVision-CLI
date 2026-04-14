@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"finsd/internal/utils"
 
@@ -122,6 +123,7 @@ func runCommandWithColor(cmd *exec.Cmd, writer io.Writer) error {
 }
 
 func CompilePackageStream(pkgName string, rawWriter io.Writer) error {
+	startTime := time.Now()
 	pkgs, _ := ScanPackages()
 	pkg, exists := pkgs[pkgName]
 	if !exists {
@@ -300,7 +302,8 @@ endif()
 		return fmt.Errorf("Build failed: %v", err)
 	}
 
-	utils.LogSuccess(rawWriter, "Build Completed Successfully!")
+	elapsed := time.Since(startTime)
+	utils.LogSuccess(rawWriter, "Build Completed Successfully! (%.1fs)", elapsed.Seconds())
 	return nil
 }
 
@@ -328,6 +331,7 @@ func CleanAllBuilds() error {
 }
 
 func CompileExe(writer io.Writer, name string) error {
+	startTime := time.Now()
 	sdkPath := utils.ExpandPath(viper.GetString("build.defaults.sdk_path"))
 	binDir := utils.ExpandPath(viper.GetString("build.defaults.build_output"))
 
@@ -416,7 +420,8 @@ endif()
 		return fmt.Errorf("Build failed: %v", err)
 	}
 
-	utils.LogSuccess(writer, "%s Build Completed Successfully!", name)
+	elapsed := time.Since(startTime)
+	utils.LogSuccess(writer, "%s Build Completed Successfully! (%.1fs)", name, elapsed.Seconds())
 	return nil
 }
 
