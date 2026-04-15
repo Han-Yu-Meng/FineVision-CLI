@@ -3,13 +3,16 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"finsd/cmd/fins/client"
@@ -135,7 +138,7 @@ var buildCmd = &cobra.Command{
 			updateStatus := func(idx int, status string) {
 				mu.Lock()
 				states[idx].status = status
-				if strings.Contains(status, "Compiling") {
+				if strings.Contains(status, "Building") {
 					states[idx].startTime = time.Now()
 				} else if strings.Contains(status, "Success") || strings.Contains(status, "Failed") {
 					states[idx].endTime = time.Now()
@@ -143,44 +146,22 @@ var buildCmd = &cobra.Command{
 				mu.Unlock()
 			}
 
-			done := make(chan bool)
-			ticker := time.NewTicker(100 * time.Millisecond)
+			done := make(chan struct{})
 
-			fmt.Printf("%-30s %-10s %-15s %-10s %s\n", "PACKAGE", "VERSION", "SOURCE", "ELAPSED", "STATUS")
-			fmt.Println(strings.Repeat("-", 100))
+			fmt.Println(color.CyanString("Streaming build status..."))
 
-			for i := 0; i < n; i++ {
-				fmt.Println()
-			}
-
-			printList := func() {
-				mu.Lock()
-				fmt.Printf("\033[%dA", n)
-				for i, p := range pkgs {
-					s := states[i]
-					elapsed := ""
-					if !s.startTime.IsZero() {
-						d := time.Since(s.startTime)
-						if !s.endTime.IsZero() {
-							d = s.endTime.Sub(s.startTime)
-						}
-						elapsed = fmt.Sprintf("%.1fs", d.Seconds())
-					}
-
-					displayName := p.Name
-					fmt.Printf("\033[2K\r%-30s %-10s %-15s %-10s %s\n", displayName, p.Version, p.Source, elapsed, s.status)
-				}
-				mu.Unlock()
-			}
+			// 处理 Ctrl+C
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+			ctx, cancel := context.WithCancel(context.Background())
 
 			go func() {
-				for {
-					select {
-					case <-done:
-						return
-					case <-ticker.C:
-						printList()
-					}
+				select {
+				case <-done:
+					return
+				case <-sigChan:
+					cancel()
+					return
 				}
 			}()
 
@@ -197,19 +178,35 @@ var buildCmd = &cobra.Command{
 				go func(idx int, pkgName string) {
 					defer wg.Done()
 
-					sem <- struct{}{} // 获取令牌
+					select {
+					case sem <- struct{}{}:
+					case <-ctx.Done():
+						updateStatus(idx, color.YellowString("Cancelled ⚠"))
+						fmt.Printf("[%s] - %s\n", pkgName, color.YellowString("Cancelled"))
+						return
+					}
+
 					updateStatus(idx, color.CyanString("Building 🚀"))
+					fmt.Printf("[%s] - %s\n", pkgName, color.CyanString("Building..."))
 
 					url := fmt.Sprintf("%s/api/build/%s", DaemonURL, pkgName)
-					resp, err := http.Post(url, "application/json", nil)
+
+					// 创建支持取消的请求
+					req, _ := http.NewRequestWithContext(ctx, "POST", url, nil)
+					resp, err := http.DefaultClient.Do(req)
 
 					defer func() { <-sem }() // 释放令牌
 
 					if err != nil {
-						updateStatus(idx, color.RedString("Request Failed ✘"))
-						errMu.Lock()
-						errorLogs = append(errorLogs, fmt.Sprintf(">>> Package: %s (Request Failed)\n%v\n", pkgName, err))
-						errMu.Unlock()
+						if ctx.Err() != nil {
+							updateStatus(idx, color.YellowString("Cancelled ⚠"))
+						} else {
+							updateStatus(idx, color.RedString("Request Failed ✘"))
+							fmt.Printf("[%s] - %s\n", pkgName, color.RedString("Request Failed"))
+							errMu.Lock()
+							errorLogs = append(errorLogs, fmt.Sprintf(">>> Package: %s (Request Failed)\n%v\n", pkgName, err))
+							errMu.Unlock()
+						}
 						return
 					}
 					defer resp.Body.Close()
@@ -217,25 +214,30 @@ var buildCmd = &cobra.Command{
 					output, _ := io.ReadAll(resp.Body)
 					outStr := string(output)
 
+					mu.Lock()
+					s := states[idx]
+					elapsed := ""
+					if !s.startTime.IsZero() {
+						d := time.Since(s.startTime)
+						elapsed = fmt.Sprintf("%.1fs", d.Seconds())
+					}
+					mu.Unlock()
+
 					if strings.Contains(outStr, "[ERROR]") {
 						updateStatus(idx, color.RedString("Failed ✘"))
+						fmt.Printf("[%s] - %s (%s)\n", pkgName, color.RedString("Failed"), elapsed)
 						errMu.Lock()
 						errorLogs = append(errorLogs, fmt.Sprintf(">>> Package: %s (Build Failed)\n%s\n", pkgName, outStr))
 						errMu.Unlock()
 					} else {
 						updateStatus(idx, color.GreenString("Success ✔"))
+						fmt.Printf("[%s] - %s (%s)\n", pkgName, color.GreenString("Success"), elapsed)
 					}
 				}(i, p.Name)
 			}
 
 			wg.Wait()
-			ticker.Stop()
-			done <- true
-
-			// 最后刷新一次确保状态一致
-			time.Sleep(200 * time.Millisecond)
-			printList()
-			fmt.Println(strings.Repeat("-", 90))
+			close(done)
 
 			if len(errorLogs) > 0 {
 				utils.LogError(os.Stdout, "Errors Encountered:")
@@ -245,7 +247,11 @@ var buildCmd = &cobra.Command{
 				}
 				utils.LogError(os.Stdout, "Tasks completed with errors")
 			} else {
-				utils.LogSuccess(os.Stdout, "All tasks completed successfully")
+				if ctx.Err() != nil {
+					utils.LogWarning(os.Stdout, "Build interrupted by user")
+				} else {
+					utils.LogSuccess(os.Stdout, "All tasks completed successfully")
+				}
 			}
 			return
 		}

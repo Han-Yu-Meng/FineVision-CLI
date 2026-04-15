@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"finsd/internal/types"
 	"finsd/internal/utils"
 	"fmt"
@@ -45,7 +46,7 @@ func LoadGlobalRecipe(libName string) (*types.DependencyRecipe, error) {
 	}
 	return nil, fmt.Errorf("recipe for %s not found", libName)
 }
-func BuildDependency(libName, version string, recipe *types.DependencyRecipe, writer io.Writer, clearCache bool) error {
+func BuildDependency(ctx context.Context, libName, version string, recipe *types.DependencyRecipe, writer io.Writer, clearCache bool) error {
 	root := GetDepRoot()
 	installPath := filepath.Join(root, "install", libName, version)
 	sourceDir := filepath.Join(root, "sources", libName, version)
@@ -95,17 +96,17 @@ func BuildDependency(libName, version string, recipe *types.DependencyRecipe, wr
 	if _, err := os.Stat(filepath.Join(sourceDir, ".git")); os.IsNotExist(err) {
 		utils.LogSection(writer, "Cloning %s (%s)", libName, version)
 		utils.LogInfo(writer, "Repo: %s", targetGitURL)
-		cmd := exec.Command("git", "clone", "--recursive", targetGitURL, sourceDir)
-		if err := runCommandWithColor(cmd, buildWriter); err != nil {
+		cmd := exec.CommandContext(ctx, "git", "clone", "--recursive", targetGitURL, sourceDir)
+		if err := runCommandWithColor(ctx, cmd, buildWriter); err != nil {
 			os.RemoveAll(sourceDir)
 			return fmt.Errorf("git clone failed: %v", err)
 		}
 	}
 
 	utils.LogSection(writer, "Checking out ref: %s", targetTag)
-	cmdCheckout := exec.Command("git", "checkout", targetTag)
+	cmdCheckout := exec.CommandContext(ctx, "git", "checkout", targetTag)
 	cmdCheckout.Dir = sourceDir
-	runCommandWithColor(cmdCheckout, buildWriter)
+	runCommandWithColor(ctx, cmdCheckout, buildWriter)
 
 	globalInstallRoot := filepath.Join(root, "install")
 	args := []string{
@@ -123,13 +124,13 @@ func BuildDependency(libName, version string, recipe *types.DependencyRecipe, wr
 	}
 
 	utils.LogSection(writer, "Configuring %s %s", libName, version)
-	if err := runCommandWithColor(exec.Command("cmake", args...), buildWriter); err != nil {
+	if err := runCommandWithColor(ctx, exec.CommandContext(ctx, "cmake", args...), buildWriter); err != nil {
 		return err
 	}
 
 	utils.LogSection(writer, "Installing %s %s", libName, version)
 	installArgs := []string{"--build", buildDir, "--target", "install", "-j8"}
-	if err := runCommandWithColor(exec.Command("cmake", installArgs...), buildWriter); err != nil {
+	if err := runCommandWithColor(ctx, exec.CommandContext(ctx, "cmake", installArgs...), buildWriter); err != nil {
 		return err
 	}
 
@@ -137,7 +138,7 @@ func BuildDependency(libName, version string, recipe *types.DependencyRecipe, wr
 	return nil
 }
 
-func SolveDependencies(pkg *types.Package, writer io.Writer, clearCache bool) error {
+func SolveDependencies(ctx context.Context, pkg *types.Package, writer io.Writer, clearCache bool) error {
 	utils.LogSection(writer, "Solving dependencies for %s", pkg.Meta.Name)
 
 	for lib, ver := range pkg.Meta.Depends {
@@ -159,7 +160,7 @@ func SolveDependencies(pkg *types.Package, writer io.Writer, clearCache bool) er
 			activeRecipe = globalRecipe
 		}
 
-		if err := BuildDependency(lib, ver, activeRecipe, writer, clearCache); err != nil {
+		if err := BuildDependency(ctx, lib, ver, activeRecipe, writer, clearCache); err != nil {
 			utils.LogError(writer, "Failed to solve dependency %s: %v", lib, err)
 			return fmt.Errorf("failed to solve dependency %s: %v", lib, err)
 		}

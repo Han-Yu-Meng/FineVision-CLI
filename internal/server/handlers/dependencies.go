@@ -49,7 +49,7 @@ func BuildDependency(c *gin.Context) {
 		return
 	}
 
-	if err := core.BuildDependency(req.Library, req.Version, recipe, mw, req.Clear); err != nil {
+	if err := core.BuildDependency(c.Request.Context(), req.Library, req.Version, recipe, mw, req.Clear); err != nil {
 		utils.LogError(mw, "Dependency build failed: %v", err)
 	} else {
 		utils.LogSuccess(mw, "Dependency ready.")
@@ -97,7 +97,7 @@ func SolveDependencies(c *gin.Context) {
 
 	utils.LogSection(mw, "Solving dependencies for package: %s", p.Meta.Name)
 
-	if err := core.SolveDependencies(p, mw, clearCache); err != nil {
+	if err := core.SolveDependencies(c.Request.Context(), p, mw, clearCache); err != nil {
 		utils.LogError(mw, "Solve Failed: %v", err)
 	} else {
 		utils.LogSuccess(mw, "All dependencies are ready.")

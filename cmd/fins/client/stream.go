@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/fatih/color"
@@ -17,6 +19,22 @@ func StreamResponse(reader io.Reader) error {
 func StreamResponseWithMessage(reader io.Reader, message string) error {
 	startTime := time.Now()
 	done := make(chan bool)
+
+	// 处理 Ctrl+C
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		select {
+		case <-sigChan:
+			fmt.Printf("\n%s\n", color.YellowString("Interrupt received, cancelling build..."))
+			if closer, ok := reader.(io.Closer); ok {
+				closer.Close()
+			}
+		case <-done:
+			return
+		}
+	}()
 
 	// 使用与 utils.LogSection 类似的颜色格式
 	infoColor := color.New(color.FgHiBlue, color.Bold).SprintFunc()

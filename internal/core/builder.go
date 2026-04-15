@@ -1,17 +1,24 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"finsd/internal/utils"
 
 	"github.com/spf13/viper"
+)
+
+var (
+	buildLocks sync.Map // map[string]bool
 )
 
 const wslSanitizeLogic = `
@@ -90,9 +97,13 @@ endmacro()
 `
 
 // runCommandWithColor 执行命令并实时输出到 writer，使用管道确保实时性
-func runCommandWithColor(cmd *exec.Cmd, writer io.Writer) error {
+func runCommandWithColor(ctx context.Context, cmd *exec.Cmd, writer io.Writer) error {
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
+
+	// 重点：设置 SysProcAttr 开启进程组 (Process Group)
+	// 这样 kill -PID 对整个进程组生效，包括底层的 cmake 和 make 进程
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	if err := cmd.Start(); err != nil {
 		return err
@@ -109,8 +120,29 @@ func runCommandWithColor(cmd *exec.Cmd, writer io.Writer) error {
 		done <- true
 	}()
 
-	// 等待命令完成
-	cmdErr := cmd.Wait()
+	// 等待命令完成或 Context 取消
+	cmdErrChan := make(chan error, 1)
+	go func() {
+		cmdErrChan <- cmd.Wait()
+	}()
+
+	var cmdErr error
+	select {
+	case <-ctx.Done():
+		if cmd.Process != nil {
+			// 发送 SIGTERM 给进程组（负的 PID 代表进程组）
+			syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+
+			// 给一点时间优雅退出，然后强杀
+			go func() {
+				time.Sleep(2 * time.Second)
+				syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			}()
+		}
+		cmdErr = ctx.Err()
+	case err := <-cmdErrChan:
+		cmdErr = err
+	}
 
 	<-done
 	<-done
@@ -122,7 +154,12 @@ func runCommandWithColor(cmd *exec.Cmd, writer io.Writer) error {
 	return cmdErr
 }
 
-func CompilePackageStream(pkgName string, rawWriter io.Writer) error {
+func CompilePackageStream(ctx context.Context, pkgName string, rawWriter io.Writer) error {
+	if _, loaded := buildLocks.LoadOrStore(pkgName, true); loaded {
+		return fmt.Errorf("package %s is already being compiled", pkgName)
+	}
+	defer buildLocks.Delete(pkgName)
+
 	startTime := time.Now()
 	pkgs, _ := ScanPackages()
 	pkg, exists := pkgs[pkgName]
@@ -130,7 +167,7 @@ func CompilePackageStream(pkgName string, rawWriter io.Writer) error {
 		return fmt.Errorf("package %s not found", pkgName)
 	}
 
-	if err := SolveDependencies(pkg, rawWriter, false); err != nil {
+	if err := SolveDependencies(ctx, pkg, rawWriter, false); err != nil {
 		return err
 	}
 
@@ -280,10 +317,13 @@ endif()
 	// 2. 创建一个带缩进的 Writer 给 CMake 使用
 	buildWriter := utils.NewBuildWriter(rawWriter)
 
-	cmdConfig := exec.Command("cmake", args...)
+	cmdConfig := exec.CommandContext(ctx, "cmake", args...)
 
 	// 3. 传入缩进 Writer
-	if err := runCommandWithColor(cmdConfig, buildWriter); err != nil {
+	if err := runCommandWithColor(ctx, cmdConfig, buildWriter); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return fmt.Errorf("CMake Config failed: %v", err)
 	}
 
@@ -296,8 +336,11 @@ endif()
 	}
 	buildArgs := []string{"--build", buildDir, "--target", targetName, "-j", buildJobs}
 
-	cmdBuild := exec.Command("cmake", buildArgs...)
-	if err := runCommandWithColor(cmdBuild, buildWriter); err != nil {
+	cmdBuild := exec.CommandContext(ctx, "cmake", buildArgs...)
+	if err := runCommandWithColor(ctx, cmdBuild, buildWriter); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return fmt.Errorf("Build failed: %v", err)
 	}
 
@@ -329,7 +372,7 @@ func CleanAllBuilds() error {
 	return nil
 }
 
-func CompileExe(writer io.Writer, name string) error {
+func CompileExe(ctx context.Context, writer io.Writer, name string) error {
 	startTime := time.Now()
 	sdkPath := utils.ExpandPath(viper.GetString("build.defaults.sdk_path"))
 	binDir := utils.ExpandPath(viper.GetString("build.defaults.build_output"))
@@ -405,7 +448,11 @@ endif()
 	utils.LogSection(writer, "Configuring %s (Type: %s)", name, buildType)
 	buildWriter := utils.NewBuildWriter(writer)
 
-	if err := runCommandWithColor(exec.Command("cmake", args...), buildWriter); err != nil {
+	cmdConfig := exec.CommandContext(ctx, "cmake", args...)
+	if err := runCommandWithColor(ctx, cmdConfig, buildWriter); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return fmt.Errorf("CMake Config failed: %v", err)
 	}
 
@@ -415,7 +462,11 @@ endif()
 		buildJobs = "4"
 	}
 
-	if err := runCommandWithColor(exec.Command("cmake", "--build", buildDir, "-j", buildJobs), buildWriter); err != nil {
+	cmdBuild := exec.CommandContext(ctx, "cmake", "--build", buildDir, "-j", buildJobs)
+	if err := runCommandWithColor(ctx, cmdBuild, buildWriter); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return fmt.Errorf("Build failed: %v", err)
 	}
 
@@ -424,10 +475,10 @@ endif()
 	return nil
 }
 
-func CompileAgent(writer io.Writer) error {
-	return CompileExe(writer, "agent")
+func CompileAgent(ctx context.Context, writer io.Writer) error {
+	return CompileExe(ctx, writer, "agent")
 }
 
-func CompileInspect(writer io.Writer) error {
-	return CompileExe(writer, "inspect")
+func CompileInspect(ctx context.Context, writer io.Writer) error {
+	return CompileExe(ctx, writer, "inspect")
 }

@@ -38,10 +38,14 @@ func CompilePackage(c *gin.Context) {
 
 	PackageWatcher.UpdateStatus(pkgName, types.StatusCompiling)
 
-	err := core.CompilePackageStream(pkgName, mw)
+	err := core.CompilePackageStream(c.Request.Context(), pkgName, mw)
 
 	if err != nil {
-		errMsg := "\n[ERROR] Compilation Failed\n"
+		if c.Request.Context().Err() != nil {
+			fmt.Fprintf(mw, "\n[INFO] Compilation cancelled by user\n")
+			return
+		}
+		errMsg := fmt.Sprintf("\n[ERROR] Compilation Failed: %v\n", err)
 		mw.Write([]byte(errMsg))
 		PackageWatcher.UpdateStatus(pkgName, types.StatusFailed)
 	} else {
@@ -74,7 +78,11 @@ func CompileAgent(c *gin.Context) {
 		flusher: flusher,
 	}
 
-	if err := core.CompileAgent(mw); err != nil {
+	if err := core.CompileAgent(c.Request.Context(), mw); err != nil {
+		if c.Request.Context().Err() != nil {
+			fmt.Fprintf(mw, "\n[INFO] Agent Compilation cancelled by user\n")
+			return
+		}
 		mw.Write([]byte(fmt.Sprintf("\n[ERROR] Agent Compilation Failed: %v\n", err)))
 	}
 }
@@ -95,7 +103,11 @@ func CompileInspect(c *gin.Context) {
 		flusher: flusher,
 	}
 
-	if err := core.CompileInspect(mw); err != nil {
+	if err := core.CompileInspect(c.Request.Context(), mw); err != nil {
+		if c.Request.Context().Err() != nil {
+			fmt.Fprintf(mw, "\n[INFO] Inspect Compilation cancelled by user\n")
+			return
+		}
 		mw.Write([]byte(fmt.Sprintf("\n[ERROR] Inspect Compilation Failed: %v\n", err)))
 	}
 }
