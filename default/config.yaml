@@ -16,6 +16,13 @@ build:
             description: Release mode
             build_type: Release
             sanitize: none
+        profile:
+            build_type: RelWithDebInfo
+            cmake_args:
+                - -DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O2 -g -fno-omit-frame-pointer
+                - -DCMAKE_C_FLAGS_RELWITHDEBINFO=-O2 -g -fno-omit-frame-pointer
+            description: Profiling mode for perf
+            sanitize: none
         simulate:
             description: Simulation mode
             build_type: RelWithDebInfo
