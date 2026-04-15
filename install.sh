@@ -63,7 +63,24 @@ else
 fi
 log_success "System dependencies installed successfully."
 
-# 4. Get the latest version of binary files from GitHub
+# 4. detect system architecture
+ARCH=$(uname -m)
+case $ARCH in
+    x86_64)
+        BINARY_SUFFIX="amd64"
+        log_info "Detected architecture: x86_64 (amd64)"
+        ;;
+    aarch64|arm64)
+        BINARY_SUFFIX="arm64"
+        log_info "Detected architecture: aarch64 (arm64)"
+        ;;
+    *)
+        log_error "Unsupported architecture: $ARCH"
+        exit 1
+        ;;
+esac
+
+# 5. Get the latest version of binary files from GitHub
 log_info "Querying the Release version from GitHub..."
 
 # Try to get the latest stable release, fallback to include pre-releases (for 'latest' tag)
@@ -79,14 +96,14 @@ if [ "$RATE_LIMITED" = "true" ] || echo "$LATEST_RELEASE" | grep -q "Not Found" 
     log_warn "API rate limited or latest stable release not found. Attempting to use static 'latest' tag URLs..."
     
     # Define fallback URLs directly based on your naming convention in release.yml
-    FINS_URL="${GH_PROXY}https://github.com/$GITHUB_USER/$GITHUB_REPO/releases/download/latest/fins-linux-amd64"
-    FINSD_URL="${GH_PROXY}https://github.com/$GITHUB_USER/$GITHUB_REPO/releases/download/latest/finsd-linux-amd64"
+    FINS_URL="${GH_PROXY}https://github.com/$GITHUB_USER/$GITHUB_REPO/releases/download/latest/fins-linux-$BINARY_SUFFIX"
+    FINSD_URL="${GH_PROXY}https://github.com/$GITHUB_USER/$GITHUB_REPO/releases/download/latest/finsd-linux-$BINARY_SUFFIX"
     
     log_info "Attempting direct download from: $FINS_URL"
 else
     # Parse download links
-    FINS_URL=$(echo "$LATEST_RELEASE" | jq -r '.assets[]? | select(.name | test("fins-linux-amd64|fins$")) | .browser_download_url' | head -n 1)
-    FINSD_URL=$(echo "$LATEST_RELEASE" | jq -r '.assets[]? | select(.name | test("finsd-linux-amd64|finsd$")) | .browser_download_url' | head -n 1)
+    FINS_URL=$(echo "$LATEST_RELEASE" | jq -r ".assets[]? | select(.name | test(\"fins-linux-$BINARY_SUFFIX|fins$\")) | .browser_download_url" | head -n 1)
+    FINSD_URL=$(echo "$LATEST_RELEASE" | jq -r ".assets[]? | select(.name | test(\"finsd-linux-$BINARY_SUFFIX|finsd$\")) | .browser_download_url" | head -n 1)
 
     # Prefix with proxy
     FINS_URL="${GH_PROXY}${FINS_URL}"
