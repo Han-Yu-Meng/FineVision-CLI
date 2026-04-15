@@ -167,7 +167,7 @@ func CompilePackageStream(pkgName string, rawWriter io.Writer) error {
 
 	wrapperContent := fmt.Sprintf(`
 cmake_minimum_required(VERSION 3.16)
-project(fins_wrapper)
+project(fins_wrapper LANGUAGES CXX)
 
 find_package(Threads REQUIRED)
 
