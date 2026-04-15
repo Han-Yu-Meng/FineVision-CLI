@@ -102,8 +102,17 @@ if [ "$RATE_LIMITED" = "true" ] || echo "$LATEST_RELEASE" | grep -q "Not Found" 
     log_info "Attempting direct download from: $FINS_URL"
 else
     # Parse download links
-    FINS_URL=$(echo "$LATEST_RELEASE" | jq -r ".assets[]? | select(.name | test(\"fins-linux-$BINARY_SUFFIX|fins$\")) | .browser_download_url" | head -n 1)
-    FINSD_URL=$(echo "$LATEST_RELEASE" | jq -r ".assets[]? | select(.name | test(\"finsd-linux-$BINARY_SUFFIX|finsd$\")) | .browser_download_url" | head -n 1)
+    # Use strict matching for the binary name to ensure correct architecture
+    FINS_URL=$(echo "$LATEST_RELEASE" | jq -r ".assets[]? | select(.name == \"fins-linux-$BINARY_SUFFIX\") | .browser_download_url" | head -n 1)
+    FINSD_URL=$(echo "$LATEST_RELEASE" | jq -r ".assets[]? | select(.name == \"finsd-linux-$BINARY_SUFFIX\") | .browser_download_url" | head -n 1)
+
+    # Fallback if specific architecture binary not found (e.g. if release naming is inconsistent)
+    if [ -z "$FINS_URL" ] || [ "$FINS_URL" = "null" ]; then
+        FINS_URL=$(echo "$LATEST_RELEASE" | jq -r ".assets[]? | select(.name | test(\"fins-linux-$BINARY_SUFFIX\")) | .browser_download_url" | head -n 1)
+    fi
+    if [ -z "$FINSD_URL" ] || [ "$FINSD_URL" = "null" ]; then
+        FINSD_URL=$(echo "$LATEST_RELEASE" | jq -r ".assets[]? | select(.name | test(\"finsd-linux-$BINARY_SUFFIX\")) | .browser_download_url" | head -n 1)
+    fi
 
     # Prefix with proxy
     FINS_URL="${GH_PROXY}${FINS_URL}"
