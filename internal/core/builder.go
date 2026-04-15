@@ -235,14 +235,13 @@ endif()
 		fmt.Sprintf("-DFINS_META_SOURCE=%s", pkg.Source),
 	}
 
-	var sanFlags string
 	if sanitize != "" && sanitize != "none" {
-		sanFlags = fmt.Sprintf("-fsanitize=%s", sanitize)
+		sanFlags := fmt.Sprintf("-fsanitize=%s", sanitize)
+		args = append(args, fmt.Sprintf("-DCMAKE_CXX_FLAGS=%s", sanFlags))
+		args = append(args, fmt.Sprintf("-DCMAKE_SHARED_LINKER_FLAGS=%s", sanFlags))
+		args = append(args, fmt.Sprintf("-DCMAKE_EXE_LINKER_FLAGS=%s", sanFlags))
+		args = append(args, fmt.Sprintf("-DCMAKE_MODULE_LINKER_FLAGS=%s", sanFlags))
 	}
-	args = append(args, fmt.Sprintf("-DCMAKE_CXX_FLAGS=%s", sanFlags))
-	args = append(args, fmt.Sprintf("-DCMAKE_SHARED_LINKER_FLAGS=%s", sanFlags))
-	args = append(args, fmt.Sprintf("-DCMAKE_EXE_LINKER_FLAGS=%s", sanFlags))
-	args = append(args, fmt.Sprintf("-DCMAKE_MODULE_LINKER_FLAGS=%s", sanFlags))
 
 	args = append(args, cmakeArgs...)
 
