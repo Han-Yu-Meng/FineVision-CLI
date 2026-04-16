@@ -6,6 +6,18 @@ GITHUB_USER="Han-Yu-Meng"
 GITHUB_REPO="fins-cli"
 BRANCH="main"
 
+# Define color output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
 # Detect if running in China (using ipapi.co or similar)
 # We use a timeout to avoid hanging if the service is unavailable
 log_info "Checking network location..."
@@ -29,18 +41,6 @@ if [ "$GITHUB_ACTIONS" = "true" ]; then
     echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/80-force-ipv4
     log_info "GitHub Actions environment detected. Apt optimized."
 fi
-
-# Define color output
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
-
-log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-log_warn() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
-log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # 1. Get the real user
 if [ -n "$SUDO_USER" ]; then
