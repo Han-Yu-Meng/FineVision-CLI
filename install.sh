@@ -6,7 +6,13 @@ GITHUB_USER="Han-Yu-Meng"
 GITHUB_REPO="fins-cli"
 BRANCH="main"
 
-GH_PROXY="https://gh-proxy.com/"
+# Detect if running in GitHub Actions
+if [ "$GITHUB_ACTIONS" = "true" ]; then
+    GH_PROXY=""
+    log_info "GitHub Actions environment detected. Disabling proxy."
+else
+    GH_PROXY="https://gh-proxy.com/"
+fi
 
 # Define color output
 GREEN='\033[0;32m'
