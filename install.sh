@@ -7,7 +7,7 @@ GITHUB_REPO="fins-cli"
 BRANCH="main"
 
 # Detect if running in GitHub Actions
-if [ "$GITHUB_ACTIONS" = "true" ]; then
+if [ "$IS_GITHUB_ACTION" = "true" ]; then
     GH_PROXY=""
     log_info "GitHub Actions environment detected. Disabling proxy."
 else
