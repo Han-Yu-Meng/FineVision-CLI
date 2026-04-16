@@ -6,15 +6,28 @@ GITHUB_USER="Han-Yu-Meng"
 GITHUB_REPO="fins-cli"
 BRANCH="main"
 
-# Detect if running in GitHub Actions
-if [ "$GITHUB_ACTIONS" = "true" ]; then
+# Detect if running in China (using ipapi.co or similar)
+# We use a timeout to avoid hanging if the service is unavailable
+log_info "Checking network location..."
+IS_CHINA=false
+if curl -s --connect-timeout 3 https://ipapi.co/country/ | grep -q "CN"; then
+    IS_CHINA=true
+fi
+
+if [ "$IS_CHINA" = "true" ]; then
+    GH_PROXY="https://gh-proxy.com/"
+    log_info "Location: China. Using GitHub proxy."
+else
     GH_PROXY=""
+    log_info "Location: International. Direct connection."
+fi
+
+# Detect if running in GitHub Actions for APT optimization
+if [ "$GITHUB_ACTIONS" = "true" ]; then
     export DEBIAN_FRONTEND=noninteractive
     echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-retries
     echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/80-force-ipv4
-    log_info "GitHub Actions environment detected. Proxy disabled, Apt optimized."
-else
-    GH_PROXY="https://gh-proxy.com/"
+    log_info "GitHub Actions environment detected. Apt optimized."
 fi
 
 # Define color output
