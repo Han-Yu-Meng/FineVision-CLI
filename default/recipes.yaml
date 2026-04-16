@@ -203,3 +203,7 @@ recipes:
   gflags:
     type: "system"
     system_pkg: "libgflags-dev"
+
+  tbb:
+    type: "system"
+    system_pkg: "libtbb-dev"
