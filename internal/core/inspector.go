@@ -56,6 +56,24 @@ func resolvePackageForInspect(pkgName string) (*types.Package, error) {
 
 // RunInspect 执行 inspect 二进制文件分析指定包生成的 .so 文件
 func RunInspect(pkgName string) (string, error) {
+	// 3. 解析包名
+	targetPkg, err := resolvePackageForInspect(pkgName)
+	if err != nil {
+		return "", err
+	}
+
+	// 1. 获取构建输出目录
+	binDir := utils.ExpandPath(viper.GetString("build.defaults.build_output"))
+
+	// 4. 构造 .so 文件路径
+	soName := fmt.Sprintf("lib%s_%s.so", targetPkg.Source, targetPkg.Meta.Name)
+	soPath := filepath.Join(binDir, soName)
+
+	return RunInspectFile(soPath)
+}
+
+// RunInspectFile 直接分析指定的 .so 文件
+func RunInspectFile(soPath string) (string, error) {
 	// 1. 获取构建输出目录
 	binDir := utils.ExpandPath(viper.GetString("build.defaults.build_output"))
 	inspectBin := filepath.Join(binDir, "inspect")
@@ -65,22 +83,29 @@ func RunInspect(pkgName string) (string, error) {
 		return "", fmt.Errorf("inspect tool not found at %s. Please run 'fins inspect build' first", inspectBin)
 	}
 
-	// 3. 解析包名
-	targetPkg, err := resolvePackageForInspect(pkgName)
-	if err != nil {
-		return "", err
-	}
-
-	// 4. 构造 .so 文件路径
-	soName := fmt.Sprintf("lib%s_%s.so", targetPkg.Source, targetPkg.Meta.Name)
-	soPath := filepath.Join(binDir, soName)
-
 	if _, err := os.Stat(soPath); os.IsNotExist(err) {
-		return "", fmt.Errorf("binary for package '%s' not found (%s). Has it been compiled?", pkgName, soName)
+		return "", fmt.Errorf("binary file not found at %s", soPath)
 	}
 
 	// 5. 执行 inspect 命令
 	cmd := exec.Command(inspectBin, soPath)
+
+	// 在执行时将 .so 所在的目录加入 LD_LIBRARY_PATH，以便 inspect 工具能找到依赖库
+	soDir := filepath.Dir(soPath)
+	env := os.Environ()
+	found := false
+	for i, v := range env {
+		if strings.HasPrefix(v, "LD_LIBRARY_PATH=") {
+			env[i] = v + ":" + soDir
+			found = true
+			break
+		}
+	}
+	if !found {
+		env = append(env, "LD_LIBRARY_PATH="+soDir)
+	}
+	cmd.Env = env
+
 	var out bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &out

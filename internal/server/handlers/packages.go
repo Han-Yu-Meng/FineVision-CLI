@@ -1,20 +1,301 @@
 package handlers
 
 import (
+	"archive/zip"
 	"compress/gzip"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
 	"finsd/internal/core"
 	"finsd/internal/types"
+	"finsd/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 )
+
+type GitHubRelease struct {
+	TagName string `json:"tag_name"`
+	Assets  []struct {
+		Name               string `json:"name"`
+		BrowserDownloadURL string `json:"browser_download_url"`
+	} `json:"assets"`
+}
+
+// InstallPlugin 从 GitHub Release 安装插件
+func InstallPlugin(c *gin.Context) {
+	var req struct {
+		Repo string `json:"repo"`
+	}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid request: " + err.Error()})
+		return
+	}
+
+	c.Writer.Header().Set("Content-Type", "text/plain")
+	c.Writer.Header().Set("Transfer-Encoding", "chunked")
+
+	flusher, _ := c.Writer.(http.Flusher)
+	mw := &FlushableMultiWriter{
+		Writer:  c.Writer,
+		flusher: flusher,
+	}
+
+	repo := req.Repo
+	// Handle full GitHub URLs
+	if strings.HasPrefix(repo, "https://github.com/") {
+		repo = strings.TrimPrefix(repo, "https://github.com/")
+	} else if strings.HasPrefix(repo, "git@github.com:") {
+		repo = strings.TrimPrefix(repo, "git@github.com:")
+	}
+	repo = strings.TrimSuffix(repo, ".git")
+	repo = strings.TrimRight(repo, "/")
+
+	if !strings.Contains(repo, "/") {
+		utils.LogError(mw, "Invalid repository format. Expected 'owner/repo' or GitHub URL")
+		return
+	}
+
+	utils.LogSection(mw, "Fetching latest release for %s...", repo)
+	release, err := getLatestRelease(repo)
+	if err != nil {
+		utils.LogError(mw, "Failed to get latest release: %v", err)
+		return
+	}
+
+	assetURL, assetName, err := findMatchingAsset(release)
+	if err != nil {
+		utils.LogError(mw, "Failed to find a matching asset: %v", err)
+		return
+	}
+
+	utils.LogInfo(mw, "Downloading %s...", assetName)
+	tmpZip, err := downloadAsset(assetURL)
+	if err != nil {
+		utils.LogError(mw, "Failed to download asset: %v", err)
+		return
+	}
+	defer os.Remove(tmpZip)
+
+	utils.LogInfo(mw, "Installing plugin to ~/.fins/install/...")
+	err = installFromZip(tmpZip, mw)
+	if err != nil {
+		utils.LogError(mw, "Failed to install plugin: %v", err)
+		return
+	}
+
+	utils.LogSuccess(mw, "Plugin installed successfully from %s", repo)
+}
+
+func getLatestRelease(repo string) (*GitHubRelease, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Simulated Browser User-Agent
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "token "+token)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// 打印出错误详情，方便定位是权限问题还是频率问题
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitHub API Error: %s, Body: %s", resp.Status, string(body))
+	}
+
+	var release GitHubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return nil, err
+	}
+
+	return &release, nil
+}
+
+func findMatchingAsset(release *GitHubRelease) (string, string, error) {
+	osName := "Ubuntu-22.04" // Default to Ubuntu-22.04
+
+	// Try to get os name from system files
+	if content, err := os.ReadFile("/etc/os-release"); err == nil {
+		lines := strings.Split(string(content), "\n")
+		var isUbuntu bool
+		var version string
+		for _, line := range lines {
+			if strings.HasPrefix(line, "ID=ubuntu") {
+				isUbuntu = true
+			} else if strings.HasPrefix(line, "VERSION_ID=") {
+				version = strings.Trim(strings.TrimPrefix(line, "VERSION_ID="), "\"")
+			}
+		}
+		if isUbuntu && version != "" {
+			osName = fmt.Sprintf("Ubuntu-%s", version)
+		}
+	}
+
+	arch := runtime.GOARCH
+	target := fmt.Sprintf("%s-%s.zip", osName, arch)
+
+	for _, asset := range release.Assets {
+		if strings.Contains(asset.Name, target) {
+			return asset.BrowserDownloadURL, asset.Name, nil
+		}
+	}
+
+	for _, asset := range release.Assets {
+		if strings.Contains(asset.Name, arch) && strings.Contains(asset.Name, "Ubuntu") && strings.HasSuffix(asset.Name, ".zip") {
+			return asset.BrowserDownloadURL, asset.Name, nil
+		}
+	}
+
+	return "", "", fmt.Errorf("no matching asset found for %s or architecture %s", target, arch)
+}
+
+func downloadAsset(assetURL string) (string, error) {
+	// 1. 获取代理配置
+	proxyPrefix := os.Getenv("FINS_GITHUB_PROXY")
+	finalURL := assetURL
+	if proxyPrefix != "" {
+		finalURL = proxyPrefix + assetURL
+	}
+
+	// 2. 创建自定义 Client，增加重定向处理
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			log.Printf("Redirecting to: %s", req.URL.String())
+			return nil
+		},
+	}
+
+	req, err := http.NewRequest("GET", finalURL, nil)
+	if err != nil {
+		return "", err
+	}
+
+	// 必须设置 User-Agent，否则会被某些 CDN 直接 403
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	// 3. 如果依然 403，且没用代理，尝试自动切换到代理重试
+	if resp.StatusCode == http.StatusForbidden && proxyPrefix == "" {
+		log.Println("Direct download failed with 403, retrying with proxy...")
+		// 注意：这里我们递归调用时，需要防止死循环，所以不再传递环境变量，而是直接拼常用的代理
+		// 这里暂以 https://ghproxy.com/ 为示例
+		return downloadWithProxy(assetURL)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to download from %s: %s", finalURL, resp.Status)
+	}
+
+	tmpFile, err := os.CreateTemp("", "fins-plugin-*.zip")
+	if err != nil {
+		return "", err
+	}
+	defer tmpFile.Close()
+
+	_, err = io.Copy(tmpFile, resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return tmpFile.Name(), nil
+}
+
+func downloadWithProxy(assetURL string) (string, error) {
+	proxy := "https://ghproxy.com/"
+	finalURL := proxy + assetURL
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", finalURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to download with backup proxy: %s", resp.Status)
+	}
+
+	tmpFile, err := os.CreateTemp("", "fins-plugin-*.zip")
+	if err != nil {
+		return "", err
+	}
+	defer tmpFile.Close()
+
+	_, err = io.Copy(tmpFile, resp.Body)
+	return tmpFile.Name(), err
+}
+
+func installFromZip(zipPath string, w io.Writer) error {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get user home directory: %v", err)
+	}
+	installDir := filepath.Join(home, ".fins", "install")
+
+	if _, err := os.Stat(installDir); os.IsNotExist(err) {
+		err = os.MkdirAll(installDir, 0755)
+		if err != nil {
+			return fmt.Errorf("failed to create install directory %s: %v", installDir, err)
+		}
+	}
+
+	for _, f := range r.File {
+		if strings.HasSuffix(f.Name, ".so") {
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			defer rc.Close()
+
+			path := filepath.Join(installDir, filepath.Base(f.Name))
+			dstFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+			if err != nil {
+				return err
+			}
+			defer dstFile.Close()
+
+			if _, err = io.Copy(dstFile, rc); err != nil {
+				return err
+			}
+			utils.LogInfo(w, "Extracted %s to %s", f.Name, path)
+		}
+	}
+
+	return nil
+}
 
 // GetPackages 获取所有包列表
 func GetPackages(c *gin.Context) {

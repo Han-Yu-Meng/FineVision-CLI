@@ -14,6 +14,7 @@ func SetupRoutes(r *gin.Engine) {
 	r.GET("/api/package/asset/*path", handlers.GetPackageAsset)
 	r.GET("/api/package/log/*name", handlers.GetPackageLog)
 	r.POST("/api/scan", handlers.TriggerScan)
+	r.POST("/api/install", handlers.InstallPlugin)
 
 	// 编译 API
 	r.POST("/api/build/*name", handlers.CompilePackage)
@@ -35,6 +36,7 @@ func SetupRoutes(r *gin.Engine) {
 	// Inspect API
 	r.POST("/api/inspect/build", handlers.CompileInspect)
 	r.GET("/api/inspect/analyze/*name", handlers.AnalyzePackage)
+	r.GET("/api/inspect/file", handlers.AnalyzeFile)
 
 	// 依赖管理 API
 	r.POST("/api/dep/build", handlers.BuildDependency)

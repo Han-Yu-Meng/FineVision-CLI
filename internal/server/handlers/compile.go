@@ -131,3 +131,24 @@ func AnalyzePackage(c *gin.Context) {
 
 	c.Data(200, "application/json; charset=utf-8", []byte(result))
 }
+
+// AnalyzeFile 分析指定的 .so 文件
+func AnalyzeFile(c *gin.Context) {
+	path := c.Query("path")
+	if path == "" {
+		c.JSON(400, gin.H{"error": "path parameter is required"})
+		return
+	}
+
+	result, err := core.RunInspectFile(path)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(404, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(500, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.Data(200, "application/json; charset=utf-8", []byte(result))
+}
