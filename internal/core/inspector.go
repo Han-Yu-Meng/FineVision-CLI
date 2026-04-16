@@ -78,20 +78,44 @@ func RunInspectFile(soPath string) (string, error) {
 	binDir := utils.ExpandPath(viper.GetString("build.defaults.build_output"))
 	inspectBin := filepath.Join(binDir, "inspect")
 
+	// 处理相对路径
+	actualPath := soPath
+	if !filepath.IsAbs(soPath) {
+		actualPath = filepath.Join(binDir, soPath)
+	}
+
 	// 2. 检查 inspect 工具是否存在
 	if _, err := os.Stat(inspectBin); os.IsNotExist(err) {
 		return "", fmt.Errorf("inspect tool not found at %s. Please run 'fins inspect build' first", inspectBin)
 	}
 
-	if _, err := os.Stat(soPath); os.IsNotExist(err) {
-		return "", fmt.Errorf("binary file not found at %s", soPath)
+	// 3. 处理可能存在的通配符
+	var targetPath string
+	if strings.ContainsAny(actualPath, "*?[]") {
+		matches, err := filepath.Glob(actualPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to process glob pattern: %v", err)
+		}
+		if len(matches) == 0 {
+			return "", fmt.Errorf("binary file not found at %s", actualPath)
+		}
+		if len(matches) > 1 {
+			return "", fmt.Errorf("ambiguous file pattern: %d files match: %v", len(matches), matches)
+		}
+		targetPath = matches[0]
+	} else {
+		targetPath = actualPath
+	}
+
+	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("binary file not found at %s", targetPath)
 	}
 
 	// 5. 执行 inspect 命令
-	cmd := exec.Command(inspectBin, soPath)
+	cmd := exec.Command(inspectBin, targetPath)
 
 	// 在执行时将 .so 所在的目录加入 LD_LIBRARY_PATH，以便 inspect 工具能找到依赖库
-	soDir := filepath.Dir(soPath)
+	soDir := filepath.Dir(targetPath)
 	env := os.Environ()
 	found := false
 	for i, v := range env {
