@@ -7,9 +7,12 @@ GITHUB_REPO="fins-cli"
 BRANCH="main"
 
 # Detect if running in GitHub Actions
-if [ "$IS_GITHUB_ACTION" = "true" ]; then
+if [ "$GITHUB_ACTIONS" = "true" ]; then
     GH_PROXY=""
-    log_info "GitHub Actions environment detected. Disabling proxy."
+    export DEBIAN_FRONTEND=noninteractive
+    echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-retries
+    echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/80-force-ipv4
+    log_info "GitHub Actions environment detected. Proxy disabled, Apt optimized."
 else
     GH_PROXY="https://gh-proxy.com/"
 fi
