@@ -1,5 +1,3 @@
-// cmd/fins/commands/inspect.go
-
 package commands
 
 import (

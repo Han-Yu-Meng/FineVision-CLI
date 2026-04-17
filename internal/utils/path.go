@@ -32,3 +32,19 @@ func GetLogDir() string {
 	os.MkdirAll(logDir, 0755)
 	return logDir
 }
+
+func GetROSDistro() string {
+	distros := []string{"jazzy", "humble", "iron", "noetic", "galactic", "foxy"}
+
+	if envDistro := os.Getenv("ROS_DISTRO"); envDistro != "" {
+		return envDistro
+	}
+
+	for _, d := range distros {
+		if _, err := os.Stat(filepath.Join("/opt/ros", d)); err == nil {
+			return d
+		}
+	}
+
+	return ""
+}

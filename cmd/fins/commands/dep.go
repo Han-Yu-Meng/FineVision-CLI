@@ -1,5 +1,3 @@
-// cmd/fins/commands/dep.go
-
 package commands
 
 import (
@@ -154,19 +152,10 @@ func resolveSystemPackage(libName string, localRecipes map[string]types.Dependen
 	}
 
 	if pkgName != "" && strings.Contains(pkgName, "${ROS_DISTRO}") {
-		rosDistro := os.Getenv("ROS_DISTRO")
+		rosDistro := utils.GetROSDistro()
 		if rosDistro == "" {
-			distros := []string{"jazzy", "humble", "iron", "galactic", "foxy"}
-			for _, d := range distros {
-				if _, err := os.Stat("/opt/ros/" + d); err == nil {
-					rosDistro = d
-					break
-				}
-			}
-			if rosDistro == "" {
-				utils.LogWarning(os.Stdout, "ROS_DISTRO not set and no common ROS distros found. Defaulting to 'humble'.")
-				rosDistro = "humble"
-			}
+			utils.LogWarning(os.Stdout, "ROS_DISTRO not set and no common ROS distros found. Defaulting to 'humble'.")
+			rosDistro = "humble"
 		}
 		pkgName = strings.ReplaceAll(pkgName, "${ROS_DISTRO}", rosDistro)
 	}

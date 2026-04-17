@@ -1,5 +1,3 @@
-// finsd/cmd/fins/commands/agent.go
-
 package commands
 
 import (

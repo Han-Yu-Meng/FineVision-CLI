@@ -1,5 +1,3 @@
-// cmd/fins/commands/root.go
-
 package commands
 
 import (

@@ -1,5 +1,3 @@
-// cmd/fins/commands/workspace.go
-
 package commands
 
 import (
