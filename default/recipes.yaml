@@ -73,7 +73,8 @@ recipes:
     cmake_args:
       - "-DBUILD_TESTING=OFF"
       - "-DWITH_GFLAGS=OFF"
-      - "-DBUILD_SHARED_LIBS=ON"
+      - "-DBUILD_SHARED_LIBS=OFF"
+      - "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
     versions:
       "0.6.0":
         tag: "v0.6.0"
