@@ -74,16 +74,35 @@ fi
 
 # 3. Install system dependencies
 log_info "Installing system dependencies"
-sudo apt-get update -y
 
-# Detect OS version for mold compatibility (available in Ubuntu 22.04+)
+# Function to check if packages are installed
+check_packages() {
+    local pkgs=("$@")
+    local missing_pkgs=()
+    for pkg in "${pkgs[@]}"; do
+        if ! dpkg -s "$pkg" >/dev/null 2>&1; then
+            missing_pkgs+=("$pkg")
+        fi
+    done
+    echo "${missing_pkgs[@]}"
+}
+
+REQUIRED_PKGS=("ninja-build" "build-essential" "curl" "jq" "wget")
 UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "0.0")
 if (( $(echo "$UBUNTU_VERSION >= 22.04" | bc -l) )); then
-    sudo apt-get install -y ninja-build build-essential curl jq wget mold
-else
-    sudo apt-get install -y ninja-build build-essential curl jq wget
+    REQUIRED_PKGS+=("mold")
 fi
-log_success "System dependencies installed successfully."
+
+MISSING_PKGS=$(check_packages "${REQUIRED_PKGS[@]}")
+
+if [ -z "$MISSING_PKGS" ]; then
+    log_success "All required packages are already installed. Skipping apt-get."
+else
+    log_info "Missing packages: $MISSING_PKGS. Installing..."
+    sudo apt-get update -y
+    sudo apt-get install -y $MISSING_PKGS
+    log_success "System dependencies installed successfully."
+fi
 
 # 4. detect system architecture
 ARCH=$(uname -m)
