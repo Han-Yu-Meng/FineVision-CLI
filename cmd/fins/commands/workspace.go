@@ -60,7 +60,6 @@ var workspaceAddCmd = &cobra.Command{
 
 		utils.LogSuccess(os.Stdout, "Workspace '%s' added at %s", name, absPath)
 
-		// 自动触发扫描
 		url := fmt.Sprintf("%s/api/scan", DaemonURL)
 		resp, err := http.Post(url, "application/json", nil)
 		if err != nil {

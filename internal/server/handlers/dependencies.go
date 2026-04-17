@@ -14,7 +14,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// BuildDependency 构建依赖
 func BuildDependency(c *gin.Context) {
 	var req struct {
 		Library string `json:"library"`
@@ -56,7 +55,6 @@ func BuildDependency(c *gin.Context) {
 	}
 }
 
-// SolveDependencies 解决依赖
 func SolveDependencies(c *gin.Context) {
 	pkgName := c.Param("name")
 	if len(pkgName) > 1 && pkgName[0] == '/' {
@@ -104,7 +102,6 @@ func SolveDependencies(c *gin.Context) {
 	}
 }
 
-// GetRecipe 获取依赖配方
 func GetRecipe(c *gin.Context) {
 	name := c.Param("name")
 	recipe, err := core.LoadGlobalRecipe(name)

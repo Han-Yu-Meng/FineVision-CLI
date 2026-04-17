@@ -14,7 +14,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CompilePackage 编译包
 func CompilePackage(c *gin.Context) {
 	pkgName := c.Param("name")
 	if len(pkgName) > 1 && pkgName[0] == '/' {
@@ -53,7 +52,6 @@ func CompilePackage(c *gin.Context) {
 	}
 }
 
-// CleanBuilds 清理构建缓存
 func CleanBuilds(c *gin.Context) {
 	if err := core.CleanAllBuilds(); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
@@ -62,7 +60,6 @@ func CleanBuilds(c *gin.Context) {
 	}
 }
 
-// CompileAgent 编译 agent
 func CompileAgent(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "text/plain")
 	c.Writer.Header().Set("Transfer-Encoding", "chunked")
@@ -87,7 +84,6 @@ func CompileAgent(c *gin.Context) {
 	}
 }
 
-// CompileInspect 编译 inspect 工具
 func CompileInspect(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "text/plain")
 	c.Writer.Header().Set("Transfer-Encoding", "chunked")
@@ -112,7 +108,6 @@ func CompileInspect(c *gin.Context) {
 	}
 }
 
-// AnalyzePackage 分析包
 func AnalyzePackage(c *gin.Context) {
 	name := c.Param("name")
 	if len(name) > 1 && name[0] == '/' {
@@ -132,7 +127,6 @@ func AnalyzePackage(c *gin.Context) {
 	c.Data(200, "application/json; charset=utf-8", []byte(result))
 }
 
-// AnalyzeFile 分析指定的 .so 文件
 func AnalyzeFile(c *gin.Context) {
 	path := c.Query("path")
 	if path == "" {

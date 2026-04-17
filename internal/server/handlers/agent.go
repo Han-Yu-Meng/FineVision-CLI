@@ -13,7 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// StartAgent 启动 agent
 func StartAgent(c *gin.Context) {
 	var req agent.AgentConfig
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -34,7 +33,6 @@ func StartAgent(c *gin.Context) {
 	c.JSON(200, gin.H{"message": fmt.Sprintf("Agent '%s' started successfully", req.AgentName)})
 }
 
-// RunAgent 运行 agent 并流显式输出
 func RunAgent(c *gin.Context) {
 	var req agent.AgentConfig
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -42,13 +40,11 @@ func RunAgent(c *gin.Context) {
 		return
 	}
 
-	// 劫持连接以支持流式输出
 	c.Writer.Header().Set("Content-Type", "text/plain")
 	c.Writer.Header().Set("Transfer-Encoding", "chunked")
 	c.Writer.WriteHeader(200)
 	flusher, _ := c.Writer.(http.Flusher)
 
-	// 使用管道将输出重定向到 http 响应
 	pr, pw, _ := os.Pipe()
 	defer pr.Close()
 
@@ -59,7 +55,6 @@ func RunAgent(c *gin.Context) {
 		return
 	}
 
-	// 将管道输出复制到客户端
 	go func() {
 		buf := make([]byte, 1024)
 		for {
@@ -74,7 +69,6 @@ func RunAgent(c *gin.Context) {
 		}
 	}()
 
-	// 等待直到 agent 停止或连接关闭
 	notify := c.Request.Context().Done()
 	agentDone := make(chan struct{})
 	go func() {
@@ -86,7 +80,6 @@ func RunAgent(c *gin.Context) {
 			}
 			select {
 			case <-notify:
-				// 客户端断开，停止 agent
 				agent.GlobalManager.Stop(req.AgentName)
 				close(agentDone)
 				return
@@ -99,7 +92,6 @@ func RunAgent(c *gin.Context) {
 	<-agentDone
 }
 
-// DebugAgent 调试 agent 并流显式输出
 func DebugAgent(c *gin.Context) {
 	var req agent.AgentConfig
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -159,7 +151,6 @@ func DebugAgent(c *gin.Context) {
 	<-agentDone
 }
 
-// StopAgent 停止 agent
 func StopAgent(c *gin.Context) {
 	var req struct {
 		AgentName string `json:"agent_name"`
@@ -180,7 +171,6 @@ func StopAgent(c *gin.Context) {
 	c.JSON(200, gin.H{"message": fmt.Sprintf("Agent '%s' stopped", req.AgentName)})
 }
 
-// GetAgentStatus 获取 agent 状态
 func GetAgentStatus(c *gin.Context) {
 	name := c.Query("name")
 	if name != "" {
@@ -195,13 +185,11 @@ func GetAgentStatus(c *gin.Context) {
 			"pid":     pid,
 		})
 	} else {
-		// Return all statuses
 		statuses := agent.GlobalManager.GetAllStatus()
 		c.JSON(200, statuses)
 	}
 }
 
-// GetAgentLogs 获取 agent 日志
 func GetAgentLogs(c *gin.Context) {
 	name := c.Query("name")
 	if name == "" {

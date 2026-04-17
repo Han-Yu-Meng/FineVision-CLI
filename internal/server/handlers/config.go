@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-// GetPresets 获取构建预设
 func GetPresets(c *gin.Context) {
 	current := viper.GetString("build.default_preset")
 	presetsMap := viper.GetStringMap("build.presets")
@@ -24,7 +23,6 @@ func GetPresets(c *gin.Context) {
 	})
 }
 
-// SetPreset 设置默认构建预设
 func SetPreset(c *gin.Context) {
 	var req struct {
 		Name string `json:"name"`

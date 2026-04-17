@@ -39,7 +39,6 @@ var installCmd = &cobra.Command{
 			return
 		}
 
-		// Stream output from server
 		_, err = io.Copy(os.Stdout, resp.Body)
 		if err != nil {
 			utils.LogError(os.Stdout, "Error reading response: %v", err)

@@ -36,8 +36,7 @@ var (
 
 func LogSection(w io.Writer, format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
-	fmt.Fprintf(w, "\n%s %s\n", InfoColor("> "), InfoColor(msg))
-	// 立即刷新
+	fmt.Fprintf(w, "%s %s\n", InfoColor("> "), InfoColor(msg))
 	if f, ok := w.(interface{ Flush() }); ok {
 		f.Flush()
 	}
@@ -76,7 +75,6 @@ func LogWarning(w io.Writer, format string, a ...interface{}) {
 	}
 }
 
-// 定义内部状态
 const (
 	stateNormal = iota
 	stateWarning

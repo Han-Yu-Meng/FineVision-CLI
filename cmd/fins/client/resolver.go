@@ -11,14 +11,8 @@ import (
 	"finsd/internal/utils"
 )
 
-// ResolvePackageIdentity 解析用户输入的包名，返回唯一的 "Source/Name" 格式
-// daemonURL: 服务端地址
-// inputName: 用户输入的包名 (可能是 short name 也可能是 full name)
-// targetSource: 用户通过 --source 指定的源 (可选)
 func ResolvePackageIdentity(daemonURL, inputName, targetSource string) (string, error) {
-	// 1. 如果用户已经输入了全名 (包含 /)，直接返回
 	if strings.Contains(inputName, "/") {
-		// 简单的校验：如果有 targetSource，检查是否匹配
 		if targetSource != "" {
 			parts := strings.Split(inputName, "/")
 			if parts[0] != targetSource {
@@ -28,13 +22,11 @@ func ResolvePackageIdentity(daemonURL, inputName, targetSource string) (string, 
 		return inputName, nil
 	}
 
-	// 2. 获取所有包列表
 	pkgs, err := FetchPackageList(daemonURL)
 	if err != nil {
 		return "", err
 	}
 
-	// 3. 筛选候选者
 	var candidates []types.PackageInfo
 	for _, p := range pkgs {
 		parts := strings.Split(p.Name, "/")
@@ -45,13 +37,11 @@ func ResolvePackageIdentity(daemonURL, inputName, targetSource string) (string, 
 		}
 	}
 
-	// 4. 决策逻辑
 	if len(candidates) == 0 {
 		return "", fmt.Errorf("package '%s' not found", inputName)
 	}
 
 	if len(candidates) == 1 {
-		// 唯一匹配，检查 targetSource 是否冲突
 		found := candidates[0]
 		if targetSource != "" {
 			parts := strings.Split(found.Name, "/")
@@ -62,9 +52,7 @@ func ResolvePackageIdentity(daemonURL, inputName, targetSource string) (string, 
 		return found.Name, nil
 	}
 
-	// 5. 存在歧义 (Ambiguous)
 	if targetSource != "" {
-		// 尝试用 source 过滤
 		for _, c := range candidates {
 			parts := strings.Split(c.Name, "/")
 			if parts[0] == targetSource {
@@ -74,7 +62,6 @@ func ResolvePackageIdentity(daemonURL, inputName, targetSource string) (string, 
 		return "", fmt.Errorf("package '%s' exists, but not in source '%s'", inputName, targetSource)
 	}
 
-	// 构造错误信息，列出所有源
 	var sources []string
 	for _, c := range candidates {
 		parts := strings.Split(c.Name, "/")
@@ -85,7 +72,6 @@ func ResolvePackageIdentity(daemonURL, inputName, targetSource string) (string, 
 	return "", fmt.Errorf("use --source <source> to specify which package to use")
 }
 
-// FetchPackageList 封装获取列表的请求
 func FetchPackageList(daemonURL string) ([]types.PackageInfo, error) {
 	resp, err := http.Get(daemonURL + "/api/packages")
 	if err != nil {

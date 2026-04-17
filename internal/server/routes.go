@@ -6,7 +6,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// SetupRoutes 设置所有路由
 func SetupRoutes(r *gin.Engine) {
 	// 包管理 API
 	r.GET("/api/packages", handlers.GetPackages)

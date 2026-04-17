@@ -127,7 +127,6 @@ var depSolveCmd = &cobra.Command{
 		url := fmt.Sprintf("%s/api/dep/solve/%s?clear=%t", DaemonURL, pkgName, depClearCache)
 		utils.LogSection(os.Stdout, "Requesting dependency resolution for %s (Clear Cache: %v)", pkgName, depClearCache)
 
-		// 解决依赖前先触发一次扫描，确保 package.yaml 是最新的
 		scanUrl := fmt.Sprintf("%s/api/scan", DaemonURL)
 		http.Post(scanUrl, "application/json", nil)
 

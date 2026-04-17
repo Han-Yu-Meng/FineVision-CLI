@@ -88,7 +88,6 @@ var buildCmd = &cobra.Command{
 			}
 		}
 
-		// Handle "fins build ." or "fins build" in a workspace directory
 		var targetPkg string
 		if len(args) == 0 || args[0] == "." {
 			absPath, _ := filepath.Abs(".")
@@ -96,7 +95,6 @@ var buildCmd = &cobra.Command{
 			if err := viper.UnmarshalKey("local_packages", &workspaces); err == nil {
 				for _, ws := range workspaces {
 					if ws.Path == absPath {
-						// Found current directory in registered workspaces, trigger build all
 						buildAll = true
 						break
 					}
@@ -108,8 +106,6 @@ var buildCmd = &cobra.Command{
 					utils.LogError(os.Stdout, "Package name required or run in a registered workspace.")
 					return
 				}
-				// If "." but not a workspace, it might be a relative path to a single package?
-				// For now, let's assume the user meant a single package if not buildAll.
 				targetPkg = args[0]
 			}
 		} else {
@@ -150,7 +146,6 @@ var buildCmd = &cobra.Command{
 
 			fmt.Println(color.CyanString("Streaming build status..."))
 
-			// 处理 Ctrl+C
 			sigChan := make(chan os.Signal, 1)
 			signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -165,11 +160,9 @@ var buildCmd = &cobra.Command{
 				}
 			}()
 
-			// 任务队列
 			var wg sync.WaitGroup
-			sem := make(chan struct{}, MaxConcurrentBuilds) // 信号量限制并发数
+			sem := make(chan struct{}, MaxConcurrentBuilds)
 
-			// 错误日志收集
 			var errMu sync.Mutex
 			var errorLogs []string
 
@@ -191,11 +184,10 @@ var buildCmd = &cobra.Command{
 
 					url := fmt.Sprintf("%s/api/build/%s", DaemonURL, pkgName)
 
-					// 创建支持取消的请求
 					req, _ := http.NewRequestWithContext(ctx, "POST", url, nil)
 					resp, err := http.DefaultClient.Do(req)
 
-					defer func() { <-sem }() // 释放令牌
+					defer func() { <-sem }()
 
 					if err != nil {
 						if ctx.Err() != nil {
@@ -256,7 +248,6 @@ var buildCmd = &cobra.Command{
 			return
 		}
 
-		// 使用 resolver 解析包名
 		finalPkg, err := client.ResolvePackageIdentity(DaemonURL, targetPkg, targetSource)
 		if err != nil {
 			utils.LogError(os.Stdout, "%v", err)
@@ -272,7 +263,6 @@ var buildCmd = &cobra.Command{
 		}
 		defer resp.Body.Close()
 
-		// 使用流式输出，实时显示编译进度
 		client.StreamResponse(resp.Body)
 	},
 }

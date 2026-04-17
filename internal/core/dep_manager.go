@@ -46,6 +46,7 @@ func LoadGlobalRecipe(libName string) (*types.DependencyRecipe, error) {
 	}
 	return nil, fmt.Errorf("recipe for %s not found", libName)
 }
+
 func BuildDependency(ctx context.Context, libName, version string, recipe *types.DependencyRecipe, writer io.Writer, clearCache bool) error {
 	root := GetDepRoot()
 	installPath := filepath.Join(root, "install", libName, version)
@@ -90,7 +91,6 @@ func BuildDependency(ctx context.Context, libName, version string, recipe *types
 		return fmt.Errorf("failed to create source root: %v", err)
 	}
 
-	// 创建缩进的 Writer 用于 Git 和 CMake 输出
 	buildWriter := utils.NewBuildWriter(writer)
 
 	if _, err := os.Stat(filepath.Join(sourceDir, ".git")); os.IsNotExist(err) {

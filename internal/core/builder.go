@@ -96,20 +96,33 @@ macro(fins_optional_ros_dependency target pkg_name)
 endmacro()
 `
 
-// runCommandWithColor 执行命令并实时输出到 writer，使用管道确保实时性
+func getMoldLibexec() string {
+	paths := []string{
+		"/usr/libexec/mold",
+		"/usr/local/libexec/mold",
+		"/usr/lib/mold",
+		"/usr/local/lib/mold",
+	}
+
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+
+	return "/usr/libexec/mold"
+}
+
 func runCommandWithColor(ctx context.Context, cmd *exec.Cmd, writer io.Writer) error {
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
 
-	// 重点：设置 SysProcAttr 开启进程组 (Process Group)
-	// 这样 kill -PID 对整个进程组生效，包括底层的 cmake 和 make 进程
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	if err := cmd.Start(); err != nil {
 		return err
 	}
 
-	// 并发读取 stdout 和 stderr
 	done := make(chan bool, 2)
 	go func() {
 		io.Copy(writer, stdout)
@@ -120,7 +133,6 @@ func runCommandWithColor(ctx context.Context, cmd *exec.Cmd, writer io.Writer) e
 		done <- true
 	}()
 
-	// 等待命令完成或 Context 取消
 	cmdErrChan := make(chan error, 1)
 	go func() {
 		cmdErrChan <- cmd.Wait()
@@ -130,10 +142,8 @@ func runCommandWithColor(ctx context.Context, cmd *exec.Cmd, writer io.Writer) e
 	select {
 	case <-ctx.Done():
 		if cmd.Process != nil {
-			// 发送 SIGTERM 给进程组（负的 PID 代表进程组）
 			syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 
-			// 给一点时间优雅退出，然后强杀
 			go func() {
 				time.Sleep(2 * time.Second)
 				syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
@@ -298,10 +308,7 @@ endif()
 				"-DCMAKE_MODULE_LINKER_FLAGS=-fuse-ld=mold",
 			)
 		} else {
-			moldLibexec := "/usr/libexec/mold"
-			if _, err := os.Stat(moldLibexec); os.IsNotExist(err) {
-				moldLibexec = "/usr/local/libexec/mold"
-			}
+			moldLibexec := getMoldLibexec()
 			flag := fmt.Sprintf("-B%s", moldLibexec)
 			args = append(args,
 				fmt.Sprintf("-DCMAKE_EXE_LINKER_FLAGS=%s", flag),
@@ -311,15 +318,12 @@ endif()
 		}
 	}
 
-	// 1. 使用 LogSection 打印 FINS 标题
 	utils.LogSection(rawWriter, "Configuring %s (Preset: %s)", pkgName, currentPreset)
 
-	// 2. 创建一个带缩进的 Writer 给 CMake 使用
 	buildWriter := utils.NewBuildWriter(rawWriter)
 
 	cmdConfig := exec.CommandContext(ctx, "cmake", args...)
 
-	// 3. 传入缩进 Writer
 	if err := runCommandWithColor(ctx, cmdConfig, buildWriter); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -437,10 +441,7 @@ endif()
 		if useFuseLd {
 			args = append(args, "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold")
 		} else {
-			moldLibexec := "/usr/libexec/mold"
-			if _, err := os.Stat(moldLibexec); os.IsNotExist(err) {
-				moldLibexec = "/usr/local/libexec/mold"
-			}
+			moldLibexec := getMoldLibexec()
 			args = append(args, fmt.Sprintf("-DCMAKE_EXE_LINKER_FLAGS=-B%s", moldLibexec))
 		}
 	}

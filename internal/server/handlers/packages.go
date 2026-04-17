@@ -30,7 +30,6 @@ type GitHubRelease struct {
 	} `json:"assets"`
 }
 
-// InstallPlugin 从 GitHub Release 安装插件
 func InstallPlugin(c *gin.Context) {
 	var req struct {
 		Repo string `json:"repo"`
@@ -50,7 +49,6 @@ func InstallPlugin(c *gin.Context) {
 	}
 
 	repo := req.Repo
-	// Handle full GitHub URLs
 	if strings.HasPrefix(repo, "https://github.com/") {
 		repo = strings.TrimPrefix(repo, "https://github.com/")
 	} else if strings.HasPrefix(repo, "git@github.com:") {
@@ -103,7 +101,6 @@ func getLatestRelease(repo string) (*GitHubRelease, error) {
 		return nil, err
 	}
 
-	// Simulated Browser User-Agent
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 		req.Header.Set("Authorization", "token "+token)
@@ -116,7 +113,6 @@ func getLatestRelease(repo string) (*GitHubRelease, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		// 打印出错误详情，方便定位是权限问题还是频率问题
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("GitHub API Error: %s, Body: %s", resp.Status, string(body))
 	}
@@ -130,9 +126,8 @@ func getLatestRelease(repo string) (*GitHubRelease, error) {
 }
 
 func findMatchingAsset(release *GitHubRelease) (string, string, error) {
-	osName := "Ubuntu-22.04" // Default to Ubuntu-22.04
+	osName := "Ubuntu-22.04"
 
-	// Try to get os name from system files
 	if content, err := os.ReadFile("/etc/os-release"); err == nil {
 		lines := strings.Split(string(content), "\n")
 		var isUbuntu bool
@@ -168,14 +163,12 @@ func findMatchingAsset(release *GitHubRelease) (string, string, error) {
 }
 
 func downloadAsset(assetURL string) (string, error) {
-	// 1. 获取代理配置
 	proxyPrefix := os.Getenv("FINS_GITHUB_PROXY")
 	finalURL := assetURL
 	if proxyPrefix != "" {
 		finalURL = proxyPrefix + assetURL
 	}
 
-	// 2. 创建自定义 Client，增加重定向处理
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			log.Printf("Redirecting to: %s", req.URL.String())
@@ -188,7 +181,6 @@ func downloadAsset(assetURL string) (string, error) {
 		return "", err
 	}
 
-	// 必须设置 User-Agent，否则会被某些 CDN 直接 403
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 	resp, err := client.Do(req)
@@ -197,11 +189,8 @@ func downloadAsset(assetURL string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	// 3. 如果依然 403，且没用代理，尝试自动切换到代理重试
 	if resp.StatusCode == http.StatusForbidden && proxyPrefix == "" {
 		log.Println("Direct download failed with 403, retrying with proxy...")
-		// 注意：这里我们递归调用时，需要防止死循环，所以不再传递环境变量，而是直接拼常用的代理
-		// 这里暂以 https://ghproxy.com/ 为示例
 		return downloadWithProxy(assetURL)
 	}
 
@@ -297,7 +286,6 @@ func installFromZip(zipPath string, w io.Writer) error {
 	return nil
 }
 
-// GetPackages 获取所有包列表
 func GetPackages(c *gin.Context) {
 	data := PackageWatcher.GetPackages()
 	if strings.Contains(c.Request.Header.Get("Accept-Encoding"), "gzip") {
@@ -312,7 +300,6 @@ func GetPackages(c *gin.Context) {
 	}
 }
 
-// GetPackageDetail 获取包详情
 func GetPackageDetail(c *gin.Context) {
 	name := c.Param("name")
 	if len(name) > 1 && name[0] == '/' {
@@ -321,7 +308,6 @@ func GetPackageDetail(c *gin.Context) {
 
 	p := PackageWatcher.GetPackage(name)
 
-	// If not found by short name, try combining with source query param
 	if p == nil {
 		source := c.Query("source")
 		if source != "" && source != "Unknown" {
@@ -329,12 +315,10 @@ func GetPackageDetail(c *gin.Context) {
 		}
 	}
 
-	// Fallback: search for suffix if short name is unique enough
 	if p == nil {
 		pkgs := PackageWatcher.GetPackages()
 		for _, pkg := range pkgs {
 			if strings.HasSuffix(pkg.Name, "/"+name) {
-				// If we find a match, double check if source matches if provided
 				source := c.Query("source")
 				if source != "" && source != "Unknown" && pkg.Source != source {
 					continue
@@ -367,7 +351,6 @@ func GetPackageDetail(c *gin.Context) {
 	c.JSON(200, details)
 }
 
-// GetPackageAsset 获取包资源文件
 func GetPackageAsset(c *gin.Context) {
 	fullPath := c.Param("path")
 	if len(fullPath) > 1 && fullPath[0] == '/' {
@@ -426,7 +409,6 @@ func GetPackageAsset(c *gin.Context) {
 	}
 }
 
-// GetPackageLog 获取包日志
 func GetPackageLog(c *gin.Context) {
 	name := c.Param("name")
 	if len(name) > 1 && name[0] == '/' {
@@ -443,9 +425,7 @@ func GetPackageLog(c *gin.Context) {
 	}
 }
 
-// TriggerScan 触发包扫描
 func TriggerScan(c *gin.Context) {
-	// 重新加载配置
 	if err := viper.ReadInConfig(); err != nil {
 		log.Printf("Failed to reload config during scan: %v", err)
 	}

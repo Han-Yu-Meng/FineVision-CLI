@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// ExpandPath 将路径中的 ~ 替换为当前用户的主目录
 func ExpandPath(path string) string {
 	if path == "" {
 		return path
@@ -27,7 +26,6 @@ func ExpandPath(path string) string {
 	return path
 }
 
-// GetLogDir 获取日志存储目录并确保其存在
 func GetLogDir() string {
 	home, _ := os.UserHomeDir()
 	logDir := filepath.Join(home, ".fins", "logs")

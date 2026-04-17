@@ -14,18 +14,15 @@ import (
 func ScanPackages() (map[string]*types.Package, error) {
 	pkgs := make(map[string]*types.Package)
 
-	// 1. Scan Local Packages
 	type LocalSource struct {
 		Name string `mapstructure:"name"`
 		Path string `mapstructure:"path"`
 	}
 	var localSources []LocalSource
 	if err := viper.UnmarshalKey("local_packages", &localSources); err != nil {
-		// handle error
+		return nil, fmt.Errorf("failed to unmarshal local_packages: %v", err)
 	}
 
-	// Fallback/Reinforcement: Manual parsing if UnmarshalKey failed to populate,
-	// which can happen with viper on map slice structures sometimes
 	if len(localSources) == 0 {
 		if raw := viper.Get("local_packages"); raw != nil {
 			if list, ok := raw.([]interface{}); ok {
@@ -33,7 +30,6 @@ func ScanPackages() (map[string]*types.Package, error) {
 					if m, ok := item.(map[string]interface{}); ok {
 						name, _ := m["name"].(string)
 						path, _ := m["path"].(string)
-						// Retry with case insensitive lookup if empty
 						if name == "" {
 							name, _ = m["Name"].(string)
 						}
@@ -61,12 +57,10 @@ func ScanPackages() (map[string]*types.Package, error) {
 				return nil
 			}
 
-			// Don't scan into hidden directories
 			if d.IsDir() && strings.HasPrefix(d.Name(), ".") && d.Name() != "." {
 				return filepath.SkipDir
 			}
 
-			// Don't scan into known build/temp directories
 			if d.IsDir() && (d.Name() == "build" || d.Name() == "devel" || d.Name() == "install") {
 				return filepath.SkipDir
 			}
@@ -76,17 +70,14 @@ func ScanPackages() (map[string]*types.Package, error) {
 				pkg := LoadPackage(pkgPath, path)
 				if pkg != nil {
 					pkg.Source = sourceName
-					// Store raw package with just the short name first
 					rawPkgs[pkg.Meta.Name] = append(rawPkgs[pkg.Meta.Name], pkg)
 				}
-				// Stop scanning deeper once a package.yaml is found in this directory
 				return filepath.SkipDir
 			}
 			return nil
 		})
 	}
 
-	// 3. Disambiguation
 	for name, entryList := range rawPkgs {
 		for _, p := range entryList {
 			fullName := fmt.Sprintf("%s/%s", p.Source, name)
@@ -123,16 +114,11 @@ func LoadPackage(path, metaPath string) *types.Package {
 	if _, err := os.Stat(filepath.Join(path, "README.md")); err == nil {
 		p.ReadmePath = filepath.Join(path, "README.md")
 	}
-	if _, err := os.Stat(filepath.Join(path, "install_deps.sh")); err == nil {
-		p.ScriptPath = filepath.Join(path, "install_deps.sh")
-	}
 
 	if _, err := os.Stat(filepath.Join(path, "assets", "logo.png")); err == nil {
 		p.IconPath = "assets/logo.png"
 	} else if _, err := os.Stat(filepath.Join(path, "assets", "logo.jpg")); err == nil {
 		p.IconPath = "assets/logo.jpg"
-	} else if _, err := os.Stat(filepath.Join(path, "logo.png")); err == nil {
-		p.IconPath = "logo.png"
 	}
 
 	p.Status = checkBuildStatus(p)
@@ -141,7 +127,6 @@ func LoadPackage(path, metaPath string) *types.Package {
 
 func checkBuildStatus(p *types.Package) types.BuildStatus {
 	binDir := viper.GetString("build_output")
-	// Must match the naming convention in builder.go (Source_Name)
 	soName := fmt.Sprintf("lib%s_%s.so", p.Source, p.Meta.Name)
 	soPath := filepath.Join(binDir, soName)
 

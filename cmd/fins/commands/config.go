@@ -74,10 +74,8 @@ var configPresetSetCmd = &cobra.Command{
 			return
 		}
 
-		// Update in memory so subsequent commands in this session see it (if any)
 		viper.Set("build.default_preset", name)
 
-		// Manual update to file to preserve comments
 		configFile := viper.ConfigFileUsed()
 		if configFile == "" {
 			utils.LogError(os.Stdout, "No configuration file found.")

@@ -29,14 +29,12 @@ var inspectCmd = &cobra.Command{
 	Long:  `Analyze the shared object (.so) file of a package to reveal its architecture, dependencies, and FINS nodes.`,
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// 1. 如果指定了 --file 模式
 		if inspectFile != "" {
 			var targetPath string
 
 			if filepath.IsAbs(inspectFile) {
 				targetPath = inspectFile
 			} else {
-				// 1.1 尝试在当前目录查找
 				matches, _ := filepath.Glob(inspectFile)
 				if len(matches) == 1 {
 					targetPath = matches[0]
@@ -44,7 +42,6 @@ var inspectCmd = &cobra.Command{
 					utils.LogError(os.Stdout, "Ambiguous file pattern: %d files match '%s' in current directory", len(matches), inspectFile)
 					return
 				} else {
-					// 1.2 尝试在默认安装目录查找
 					home, _ := os.UserHomeDir()
 					installDir := filepath.Join(home, ".fins/install")
 					pattern := filepath.Join(installDir, inspectFile)
@@ -66,7 +63,6 @@ var inspectCmd = &cobra.Command{
 				}
 			}
 
-			// 如果是绝对路径且包含通配符，也需要处理
 			if strings.ContainsAny(targetPath, "*?[]") {
 				matches, _ := filepath.Glob(targetPath)
 				if len(matches) == 0 {
@@ -109,13 +105,11 @@ var inspectCmd = &cobra.Command{
 
 		pkgName := args[0]
 
-		// 1. 兼容性保护：防止拦截子命令
 		if pkgName == "build" {
 			inspectBuildCmd.Run(cmd, args)
 			return
 		}
 
-		// 2. 使用 resolver 解析包名
 		finalPkg, err := client.ResolvePackageIdentity(DaemonURL, pkgName, targetSource)
 		if err != nil {
 			utils.LogError(os.Stdout, "%v", err)
@@ -123,7 +117,6 @@ var inspectCmd = &cobra.Command{
 			return
 		}
 
-		// 3. 执行 Inspect 请求
 		apiURL := fmt.Sprintf("%s/api/inspect/analyze/%s", DaemonURL, finalPkg)
 
 		resp, err := http.Get(apiURL)
@@ -140,7 +133,6 @@ var inspectCmd = &cobra.Command{
 func handleInspectResponse(resp *http.Response) {
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		// 如果后端返回了 JSON 错误信息，尝试美化，否则直接打印
 		var errObj map[string]interface{}
 		if json.Unmarshal(body, &errObj) == nil {
 			if msg, ok := errObj["error"].(string); ok {
@@ -188,7 +180,6 @@ var inspectBuildCmd = &cobra.Command{
 
 func init() {
 	inspectCmd.AddCommand(inspectBuildCmd)
-	// 复用 compile.go 中定义的 targetSource 变量
 	inspectCmd.Flags().StringVar(&targetSource, "source", "", "Specify package source to resolve ambiguity")
 	inspectCmd.Flags().StringVar(&inspectFile, "file", "", "Analyze a specific .so file directly")
 	RootCmd.AddCommand(inspectCmd)

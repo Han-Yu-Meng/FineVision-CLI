@@ -59,7 +59,6 @@ func (pw *PackageWatcher) setupWatchers() {
 	pw.cache = pkgs
 	pw.mutex.Unlock()
 
-	// Watch Local Workspace Roots
 	type LocalSource struct {
 		Name string `mapstructure:"name"`
 		Path string `mapstructure:"path"`
@@ -74,13 +73,10 @@ func (pw *PackageWatcher) setupWatchers() {
 				return nil
 			}
 			if d.IsDir() {
-				// Don't watch hidden directories
 				if strings.HasPrefix(d.Name(), ".") && d.Name() != "." {
 					return filepath.SkipDir
 				}
 
-				// Only watch the root and its direct subdirectories (package directories)
-				// Do not watch build/ or other deep subdirectories
 				rel, _ := filepath.Rel(root, path)
 				if rel != "." {
 					parts := strings.Split(rel, string(filepath.Separator))
@@ -100,7 +96,6 @@ func (pw *PackageWatcher) handleEvent(event fsnotify.Event) {
 	if event.Op&fsnotify.Create == fsnotify.Create {
 		info, err := os.Stat(event.Name)
 		if err == nil && info.IsDir() {
-			// Only watch if it's a direct child of a managed workspace root
 			isRootChild := false
 			var localSources []struct {
 				Name string `mapstructure:"name"`
@@ -124,7 +119,6 @@ func (pw *PackageWatcher) handleEvent(event fsnotify.Event) {
 		}
 	}
 
-	// Handle directory renaming/removal (if a package root is moved/deleted)
 	if event.Op&fsnotify.Rename == fsnotify.Rename || event.Op&fsnotify.Remove == fsnotify.Remove {
 		pw.mutex.RLock()
 		isPackageRoot := false
@@ -161,8 +155,6 @@ func (pw *PackageWatcher) handleEvent(event fsnotify.Event) {
 }
 
 func (pw *PackageWatcher) reloadPackage(dir, metaPath string) {
-	// Re-scan all packages to ensure disambiguation logic is consistent
-	// This handles cases where a name becomes unique or conflicting
 	pkgs, err := core.ScanPackages()
 	if err == nil {
 		pw.mutex.Lock()
@@ -173,7 +165,6 @@ func (pw *PackageWatcher) reloadPackage(dir, metaPath string) {
 }
 
 func (pw *PackageWatcher) Rescan() {
-	// Re-initialize watchers for any new workspace paths
 	pw.setupWatchers()
 
 	pkgs, err := core.ScanPackages()
