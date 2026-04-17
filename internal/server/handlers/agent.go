@@ -40,10 +40,7 @@ func RunAgent(c *gin.Context) {
 		return
 	}
 
-	c.Writer.Header().Set("Content-Type", "text/plain")
-	c.Writer.Header().Set("Transfer-Encoding", "chunked")
-	c.Writer.WriteHeader(200)
-	flusher, _ := c.Writer.(http.Flusher)
+	_, flusher := InitStreamResponse(c)
 
 	pr, pw, _ := os.Pipe()
 	defer pr.Close()

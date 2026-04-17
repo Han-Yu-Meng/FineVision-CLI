@@ -39,14 +39,7 @@ func InstallPlugin(c *gin.Context) {
 		return
 	}
 
-	c.Writer.Header().Set("Content-Type", "text/plain")
-	c.Writer.Header().Set("Transfer-Encoding", "chunked")
-
-	flusher, _ := c.Writer.(http.Flusher)
-	mw := &FlushableMultiWriter{
-		Writer:  c.Writer,
-		flusher: flusher,
-	}
+	mw, _ := InitStreamResponse(c)
 
 	repo := req.Repo
 	if strings.HasPrefix(repo, "https://github.com/") {

@@ -25,20 +25,15 @@ func BuildDependency(c *gin.Context) {
 		return
 	}
 
-	c.Writer.Header().Set("Content-Type", "text/plain")
-	c.Writer.Header().Set("Transfer-Encoding", "chunked")
+	rawMw, flusher := InitStreamResponse(c)
 
 	safeVer := strings.ReplaceAll(req.Version, "/", "_")
 	logPath := filepath.Join(core.GetLogDir(), fmt.Sprintf("dep_%s_%s.log", req.Library, safeVer))
 	logFile, _ := os.Create(logPath)
 	defer logFile.Close()
 
-	baseMw := io.MultiWriter(logFile, c.Writer)
-	flusher, _ := c.Writer.(http.Flusher)
-	mw := &FlushableMultiWriter{
-		Writer:  baseMw,
-		flusher: flusher,
-	}
+	baseMw := io.MultiWriter(logFile, rawMw)
+	mw := NewFlushableMultiWriter(baseMw, flusher)
 
 	utils.LogSection(mw, "Requesting build for dependency: %s = %s", req.Library, req.Version)
 

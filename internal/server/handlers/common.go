@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"finsd/internal/monitor"
+
+	"github.com/gin-gonic/gin"
 )
 
 var PackageWatcher *monitor.PackageWatcher
@@ -20,6 +22,15 @@ func NewFlushableMultiWriter(w io.Writer, flusher http.Flusher) *FlushableMultiW
 		Writer:  w,
 		flusher: flusher,
 	}
+}
+
+func InitStreamResponse(c *gin.Context) (*FlushableMultiWriter, http.Flusher) {
+	c.Writer.Header().Set("Content-Type", "text/plain")
+	c.Writer.Header().Set("Transfer-Encoding", "chunked")
+
+	flusher, _ := c.Writer.(http.Flusher)
+	mw := NewFlushableMultiWriter(c.Writer, flusher)
+	return mw, flusher
 }
 
 func (w *FlushableMultiWriter) Write(p []byte) (n int, err error) {

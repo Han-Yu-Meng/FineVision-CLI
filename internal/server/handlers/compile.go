@@ -20,20 +20,15 @@ func CompilePackage(c *gin.Context) {
 		pkgName = pkgName[1:]
 	}
 
-	c.Writer.Header().Set("Content-Type", "text/plain")
-	c.Writer.Header().Set("Transfer-Encoding", "chunked")
+	rawMw, flusher := InitStreamResponse(c)
 
 	safeName := strings.ReplaceAll(pkgName, "/", "_")
 	logPath := filepath.Join(core.GetLogDir(), safeName+".log")
 	logFile, _ := os.Create(logPath)
 	defer logFile.Close()
 
-	baseMw := io.MultiWriter(logFile, c.Writer)
-	flusher, _ := c.Writer.(http.Flusher)
-	mw := &FlushableMultiWriter{
-		Writer:  baseMw,
-		flusher: flusher,
-	}
+	baseMw := io.MultiWriter(logFile, rawMw)
+	mw := NewFlushableMultiWriter(baseMw, flusher)
 
 	PackageWatcher.UpdateStatus(pkgName, types.StatusCompiling)
 
