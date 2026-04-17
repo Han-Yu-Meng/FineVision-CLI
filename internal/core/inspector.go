@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -47,7 +48,9 @@ func RunInspectFile(soPath string) (string, error) {
 	}
 
 	if _, err := os.Stat(inspectBin); os.IsNotExist(err) {
-		return "", fmt.Errorf("inspect tool not found at %s. Please run 'fins inspect build' first", inspectBin)
+		if err := CompileInspect(context.Background(), os.Stdout); err != nil {
+			return "", fmt.Errorf("inspect tool not found and auto-compilation failed: %v", err)
+		}
 	}
 
 	var targetPath string

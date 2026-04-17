@@ -2,15 +2,16 @@ package handlers
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
 	"finsd/internal/agent"
 	"finsd/internal/core"
+	"finsd/internal/utils"
 
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/viper"
 )
 
 func StartAgent(c *gin.Context) {
@@ -40,7 +41,17 @@ func RunAgent(c *gin.Context) {
 		return
 	}
 
-	_, flusher := InitStreamResponse(c)
+	mw, flusher := InitStreamResponse(c)
+
+	binDir := viper.GetString("build.defaults.build_output")
+	agentBin := utils.ExpandPath(filepath.Join(binDir, "agent"))
+	if _, err := os.Stat(agentBin); os.IsNotExist(err) {
+		utils.LogSection(mw, "Agent binary not found, starting compilation...")
+		if err := core.CompileAgent(c.Request.Context(), mw); err != nil {
+			utils.LogError(mw, "Failed to compile agent: %v", err)
+			return
+		}
+	}
 
 	pr, pw, _ := os.Pipe()
 	defer pr.Close()
@@ -96,10 +107,17 @@ func DebugAgent(c *gin.Context) {
 		return
 	}
 
-	c.Writer.Header().Set("Content-Type", "text/plain")
-	c.Writer.Header().Set("Transfer-Encoding", "chunked")
-	c.Writer.WriteHeader(200)
-	flusher, _ := c.Writer.(http.Flusher)
+	mw, flusher := InitStreamResponse(c)
+
+	binDir := viper.GetString("build.defaults.build_output")
+	agentBin := utils.ExpandPath(filepath.Join(binDir, "agent"))
+	if _, err := os.Stat(agentBin); os.IsNotExist(err) {
+		utils.LogSection(mw, "Agent binary not found, starting compilation...")
+		if err := core.CompileAgent(c.Request.Context(), mw); err != nil {
+			utils.LogError(mw, "Failed to compile agent: %v", err)
+			return
+		}
+	}
 
 	pr, pw, _ := os.Pipe()
 	defer pr.Close()
