@@ -151,3 +151,33 @@ func checkBuildStatus(p *types.Package) types.BuildStatus {
 	}
 	return types.StatusCurrent
 }
+
+func ResolvePackage(inputName string, pkgs map[string]*types.Package) (*types.Package, error) {
+	if strings.Contains(inputName, "/") {
+		if p, ok := pkgs[inputName]; ok {
+			return p, nil
+		}
+		return nil, fmt.Errorf("package '%s' not found", inputName)
+	}
+
+	var candidates []*types.Package
+	for _, p := range pkgs {
+		if p.Meta.Name == inputName {
+			candidates = append(candidates, p)
+		}
+	}
+
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("package '%s' not found", inputName)
+	}
+
+	if len(candidates) == 1 {
+		return candidates[0], nil
+	}
+
+	var sources []string
+	for _, c := range candidates {
+		sources = append(sources, c.Source)
+	}
+	return nil, fmt.Errorf("ambiguous package name '%s'. Found in sources: %s. Please use 'Source/Name' format", inputName, strings.Join(sources, ", "))
+}

@@ -207,6 +207,17 @@ func (pw *PackageWatcher) GetPackage(name string) *types.Package {
 	return nil
 }
 
+func (pw *PackageWatcher) GetPackagesMap() map[string]*types.Package {
+	pw.mutex.RLock()
+	defer pw.mutex.RUnlock()
+	// Return a copy to avoid race conditions and external map mutation
+	res := make(map[string]*types.Package)
+	for k, v := range pw.cache {
+		res[k] = v
+	}
+	return res
+}
+
 func (pw *PackageWatcher) GetPackages() []types.PackageInfo {
 	pw.mutex.RLock()
 	defer pw.mutex.RUnlock()

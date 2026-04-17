@@ -20,33 +20,7 @@ func resolvePackageForInspect(pkgName string) (*types.Package, error) {
 		return nil, fmt.Errorf("failed to scan packages: %v", err)
 	}
 
-	if strings.Contains(pkgName, "/") {
-		if p, ok := pkgs[pkgName]; ok {
-			return p, nil
-		}
-		return nil, fmt.Errorf("package '%s' not found", pkgName)
-	}
-
-	var candidates []*types.Package
-	for _, p := range pkgs {
-		if p.Meta.Name == pkgName {
-			candidates = append(candidates, p)
-		}
-	}
-
-	if len(candidates) == 0 {
-		return nil, fmt.Errorf("package '%s' not found", pkgName)
-	}
-
-	if len(candidates) == 1 {
-		return candidates[0], nil
-	}
-
-	var sources []string
-	for _, c := range candidates {
-		sources = append(sources, c.Source)
-	}
-	return nil, fmt.Errorf("ambiguous package name '%s'. Found in sources: %s. Please use 'Source/Name' format", pkgName, strings.Join(sources, ", "))
+	return ResolvePackage(pkgName, pkgs)
 }
 
 func RunInspect(pkgName string) (string, error) {

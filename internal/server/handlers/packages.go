@@ -306,34 +306,10 @@ func GetPackageDetail(c *gin.Context) {
 		name = name[1:]
 	}
 
-	p := PackageWatcher.GetPackage(name)
-
-	if p == nil {
-		source := c.Query("source")
-		if source != "" && source != "Unknown" {
-			p = PackageWatcher.GetPackage(source + "/" + name)
-		}
-	}
-
-	if p == nil {
-		pkgs := PackageWatcher.GetPackages()
-		for _, pkg := range pkgs {
-			if strings.HasSuffix(pkg.Name, "/"+name) {
-				source := c.Query("source")
-				if source != "" && source != "Unknown" && pkg.Source != source {
-					continue
-				}
-				realPkg := PackageWatcher.GetPackage(pkg.Name)
-				if realPkg != nil {
-					p = realPkg
-					break
-				}
-			}
-		}
-	}
-
-	if p == nil {
-		c.JSON(404, gin.H{"error": "Package not found"})
+	pkgsMap := PackageWatcher.GetPackagesMap()
+	p, err := core.ResolvePackage(name, pkgsMap)
+	if err != nil {
+		c.JSON(404, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -360,17 +336,17 @@ func GetPackageAsset(c *gin.Context) {
 	var matchedPkg *types.Package
 	var relPath string
 
-	pkgs := PackageWatcher.GetPackages()
+	pkgsMap := PackageWatcher.GetPackagesMap()
 
-	var pkgNames []string
-	for _, p := range pkgs {
-		pkgNames = append(pkgNames, p.Name)
+	var sortedPkgNames []string
+	for name := range pkgsMap {
+		sortedPkgNames = append(sortedPkgNames, name)
 	}
-	sort.Slice(pkgNames, func(i, j int) bool { return len(pkgNames[i]) > len(pkgNames[j]) })
+	sort.Slice(sortedPkgNames, func(i, j int) bool { return len(sortedPkgNames[i]) > len(sortedPkgNames[j]) })
 
-	for _, name := range pkgNames {
+	for _, name := range sortedPkgNames {
 		if strings.HasPrefix(fullPath, name+"/") {
-			matchedPkg = PackageWatcher.GetPackage(name)
+			matchedPkg = pkgsMap[name]
 			relPath = strings.TrimPrefix(fullPath, name+"/")
 			break
 		}
@@ -382,12 +358,9 @@ func GetPackageAsset(c *gin.Context) {
 			potentialShortName := parts[0]
 			relPathCandidate := parts[1]
 
-			for _, p := range pkgs {
-				if p.Name == potentialShortName || strings.HasSuffix(p.Name, "/"+potentialShortName) {
-					matchedPkg = PackageWatcher.GetPackage(p.Name)
-					relPath = relPathCandidate
-					break
-				}
+			if p, err := core.ResolvePackage(potentialShortName, pkgsMap); err == nil {
+				matchedPkg = p
+				relPath = relPathCandidate
 			}
 		}
 	}
