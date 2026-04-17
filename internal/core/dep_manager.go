@@ -33,27 +33,15 @@ func handlePPA(ctx context.Context, ppa string, writer io.Writer) error {
 
 	utils.LogSection(writer, "Checking PPA: %s", ppa)
 
-	// Check if already added (simple check by searching /etc/apt/sources.list.d/)
 	ppaSlug := strings.TrimPrefix(ppa, "ppa:")
 	ppaSlug = strings.ReplaceAll(ppaSlug, "/", "-")
 	matches, _ := filepath.Glob("/etc/apt/sources.list.d/" + ppaSlug + "*.list")
 	if len(matches) > 0 {
-		utils.LogInfo(writer, "PPA %s already exists, skipping...", ppa)
+		utils.LogInfo(writer, "PPA %s already exists.", ppa)
 		return nil
 	}
 
-	utils.LogInfo(writer, "Adding PPA: %s", ppa)
-	cmd := exec.CommandContext(ctx, "sudo", "add-apt-repository", "-y", ppa)
-	if err := runCommandWithColor(ctx, cmd, writer); err != nil {
-		return fmt.Errorf("failed to add ppa %s: %v", ppa, err)
-	}
-
-	utils.LogInfo(writer, "Updating apt package list...")
-	updateCmd := exec.CommandContext(ctx, "sudo", "apt-get", "update")
-	if err := runCommandWithColor(ctx, updateCmd, writer); err != nil {
-		return fmt.Errorf("failed to update apt after adding ppa: %v", err)
-	}
-
+	utils.LogWarning(writer, "PPA %s seems NOT added. Please run 'sudo fins dep install' to add it.", ppa)
 	return nil
 }
 
