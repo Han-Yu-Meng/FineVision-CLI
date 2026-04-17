@@ -208,3 +208,8 @@ recipes:
   tbb:
     type: "system"
     system_pkg: "libtbb-dev"
+  
+  iridescence:
+    type: "system"
+    ppa: "ppa:koide3/iridescence"
+    system_pkg: "libiridescence-dev"

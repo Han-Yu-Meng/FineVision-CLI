@@ -13,6 +13,7 @@ const (
 type DependencyRecipe struct {
 	Type          string   `yaml:"type" json:"type"`
 	SystemPackage string   `yaml:"system_pkg" json:"system_pkg"`
+	PPA           string   `yaml:"ppa" json:"ppa"`
 	GitURL        string   `yaml:"git" json:"git"`
 	BuildSystem   string   `yaml:"build_system" json:"build_system"`
 	CMakeArgs     []string `yaml:"cmake_args" json:"cmake_args"`

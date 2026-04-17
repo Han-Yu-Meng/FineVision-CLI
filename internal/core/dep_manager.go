@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -23,6 +24,37 @@ func GetDepRoot() string {
 
 func GetLogDir() string {
 	return utils.GetLogDir()
+}
+
+func handlePPA(ctx context.Context, ppa string, writer io.Writer) error {
+	if ppa == "" {
+		return nil
+	}
+
+	utils.LogSection(writer, "Checking PPA: %s", ppa)
+
+	// Check if already added (simple check by searching /etc/apt/sources.list.d/)
+	ppaSlug := strings.TrimPrefix(ppa, "ppa:")
+	ppaSlug = strings.ReplaceAll(ppaSlug, "/", "-")
+	matches, _ := filepath.Glob("/etc/apt/sources.list.d/" + ppaSlug + "*.list")
+	if len(matches) > 0 {
+		utils.LogInfo(writer, "PPA %s already exists, skipping...", ppa)
+		return nil
+	}
+
+	utils.LogInfo(writer, "Adding PPA: %s", ppa)
+	cmd := exec.CommandContext(ctx, "sudo", "add-apt-repository", "-y", ppa)
+	if err := runCommandWithColor(ctx, cmd, writer); err != nil {
+		return fmt.Errorf("failed to add ppa %s: %v", ppa, err)
+	}
+
+	utils.LogInfo(writer, "Updating apt package list...")
+	updateCmd := exec.CommandContext(ctx, "sudo", "apt-get", "update")
+	if err := runCommandWithColor(ctx, updateCmd, writer); err != nil {
+		return fmt.Errorf("failed to update apt after adding ppa: %v", err)
+	}
+
+	return nil
 }
 
 func LoadGlobalRecipe(libName string) (*types.DependencyRecipe, error) {
@@ -139,11 +171,9 @@ func BuildDependency(ctx context.Context, libName, version string, recipe *types
 func SolveDependencies(ctx context.Context, pkg *types.Package, writer io.Writer, clearCache bool) error {
 	utils.LogSection(writer, "Solving dependencies for %s", pkg.Meta.Name)
 
-	for lib, ver := range pkg.Meta.Depends {
-		if ver == "system" {
-			continue
-		}
+	rosDistro := utils.GetROSDistro()
 
+	for lib, ver := range pkg.Meta.Depends {
 		var activeRecipe *types.DependencyRecipe
 
 		if localRecipe, ok := pkg.Meta.Recipes[lib]; ok {
@@ -156,6 +186,34 @@ func SolveDependencies(ctx context.Context, pkg *types.Package, writer io.Writer
 				return fmt.Errorf("failed to load recipe for %s: %v", lib, err)
 			}
 			activeRecipe = globalRecipe
+		}
+
+		// Handle PPA if present
+		if activeRecipe.PPA != "" {
+			if err := handlePPA(ctx, activeRecipe.PPA, writer); err != nil {
+				utils.LogError(writer, "PPA handle failed: %v", err)
+				return err
+			}
+		}
+
+		if ver == "system" {
+			sysPkg := activeRecipe.SystemPackage
+			if sysPkg == "" {
+				utils.LogWarning(writer, "Dependency %s set as system but no system_pkg defined", lib)
+				continue
+			}
+
+			if strings.Contains(sysPkg, "${ROS_DISTRO}") {
+				sysPkg = strings.ReplaceAll(sysPkg, "${ROS_DISTRO}", rosDistro)
+			}
+
+			utils.LogSection(writer, "Ensuring system package: %s", sysPkg)
+			cmd := exec.CommandContext(ctx, "sudo", "apt-get", "install", "-y", sysPkg)
+			if err := runCommandWithColor(ctx, cmd, writer); err != nil {
+				utils.LogError(writer, "System package installation failed: %v", err)
+				return err
+			}
+			continue
 		}
 
 		if err := BuildDependency(ctx, lib, ver, activeRecipe, writer, clearCache); err != nil {
