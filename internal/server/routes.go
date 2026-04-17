@@ -1,7 +1,7 @@
 package server
 
 import (
-	"finsd/internal/server/handlers"
+	"fins-cli/internal/server/handlers"
 
 	"github.com/gin-gonic/gin"
 )

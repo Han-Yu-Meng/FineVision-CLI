@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"finsd/internal/utils"
+	"fins-cli/internal/utils"
 	"fmt"
 	"os"
 	"os/exec"

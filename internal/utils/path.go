@@ -6,6 +6,13 @@ import (
 	"strings"
 )
 
+const FinsDirName = ".fins"
+
+func GetFinsHome() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, FinsDirName)
+}
+
 func ExpandPath(path string) string {
 	if path == "" {
 		return path

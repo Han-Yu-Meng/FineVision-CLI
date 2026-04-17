@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"finsd/internal/utils"
+	"fins-cli/internal/utils"
 
 	"github.com/spf13/viper"
 )

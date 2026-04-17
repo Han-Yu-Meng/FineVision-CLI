@@ -2,20 +2,18 @@ package main
 
 import (
 	"os"
-	"path/filepath"
 
-	"finsd/internal/monitor"
-	"finsd/internal/server"
-	"finsd/internal/server/handlers"
-	"finsd/internal/utils"
+	"fins-cli/internal/monitor"
+	"fins-cli/internal/server"
+	"fins-cli/internal/server/handlers"
+	"fins-cli/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 )
 
 func main() {
-	home, _ := os.UserHomeDir()
-	viper.AddConfigPath(filepath.Join(home, ".fins"))
+	viper.AddConfigPath(utils.GetFinsHome())
 	viper.AddConfigPath(".")
 	viper.SetConfigName("config")
 	if err := viper.ReadInConfig(); err != nil {

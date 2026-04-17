@@ -2,7 +2,8 @@ package commands
 
 import (
 	"os"
-	"path/filepath"
+
+	"fins-cli/internal/utils"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -20,8 +21,7 @@ func Execute() {
 }
 
 func init() {
-	home, _ := os.UserHomeDir()
-	viper.AddConfigPath(filepath.Join(home, ".fins"))
+	viper.AddConfigPath(utils.GetFinsHome())
 	viper.AddConfigPath(".")
 
 	viper.SetConfigName("config")

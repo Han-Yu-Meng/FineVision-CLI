@@ -1,7 +1,7 @@
 package core
 
 import (
-	"finsd/internal/types"
+	"fins-cli/internal/types"
 	"fmt"
 	"os"
 	"path/filepath"

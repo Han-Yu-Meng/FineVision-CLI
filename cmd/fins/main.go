@@ -1,7 +1,7 @@
 package main
 
 import (
-	"finsd/cmd/fins/commands"
+	"fins-cli/cmd/fins/commands"
 )
 
 func main() {

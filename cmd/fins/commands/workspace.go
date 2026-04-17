@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"finsd/internal/utils"
+	"fins-cli/internal/utils"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"

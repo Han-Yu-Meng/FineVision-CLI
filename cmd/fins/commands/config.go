@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"sort"
 
-	"finsd/internal/utils"
+	"fins-cli/internal/utils"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"

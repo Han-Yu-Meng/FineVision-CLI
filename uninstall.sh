@@ -46,7 +46,8 @@ log_info "Removing binary files from /usr/local/bin/..."
 [ -f /usr/local/bin/finsd ] && sudo rm /usr/local/bin/finsd && log_info "Removed /usr/local/bin/finsd"
 
 # 5. Remove configuration directory
-FINS_DIR="$REAL_HOME/.fins"
+FINS_DIR_NAME=".fins"
+FINS_DIR="$REAL_HOME/$FINS_DIR_NAME"
 if [ -d "$FINS_DIR" ]; then
     log_warn "Removing configuration directory: $FINS_DIR"
     sudo rm -rf "$FINS_DIR"

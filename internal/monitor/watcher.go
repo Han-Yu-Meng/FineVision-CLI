@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	"finsd/internal/core"
-	"finsd/internal/types"
+	"fins-cli/internal/core"
+	"fins-cli/internal/types"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"

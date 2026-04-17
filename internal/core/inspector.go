@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"finsd/internal/types"
-	"finsd/internal/utils"
+	"fins-cli/internal/types"
+	"fins-cli/internal/utils"
 
 	"github.com/spf13/viper"
 )

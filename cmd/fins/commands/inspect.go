@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"finsd/cmd/fins/client"
-	"finsd/internal/utils"
+	"fins-cli/cmd/fins/client"
+	"fins-cli/internal/utils"
 
 	"github.com/spf13/cobra"
 )

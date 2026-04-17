@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"finsd/internal/agent"
-	"finsd/internal/core"
-	"finsd/internal/utils"
+	"fins-cli/internal/agent"
+	"fins-cli/internal/core"
+	"fins-cli/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"

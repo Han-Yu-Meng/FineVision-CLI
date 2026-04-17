@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"finsd/internal/core"
-	"finsd/internal/types"
+	"fins-cli/internal/core"
+	"fins-cli/internal/types"
 
 	"github.com/gin-gonic/gin"
 )

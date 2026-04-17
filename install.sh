@@ -183,7 +183,8 @@ sudo chmod +x /usr/local/bin/finsd
 log_success "Binary files downloaded and installed successfully."
 
 # 5. Download default configuration files to user directory ~/.fins/
-FINS_DIR="$REAL_HOME/.fins"
+FINS_DIR_NAME=".fins"
+FINS_DIR="$REAL_HOME/$FINS_DIR_NAME"
 log_info "Configuring default files to $FINS_DIR ..."
 
 sudo -u "$REAL_USER" mkdir -p "$FINS_DIR"

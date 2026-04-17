@@ -14,9 +14,9 @@ import (
 	"sort"
 	"strings"
 
-	"finsd/internal/core"
-	"finsd/internal/types"
-	"finsd/internal/utils"
+	"fins-cli/internal/core"
+	"fins-cli/internal/types"
+	"fins-cli/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
@@ -76,7 +76,7 @@ func InstallPlugin(c *gin.Context) {
 	}
 	defer os.Remove(tmpZip)
 
-	utils.LogInfo(mw, "Installing plugin to ~/.fins/install/...")
+	utils.LogInfo(mw, "Installing plugin to %s/install/...", utils.GetFinsHome())
 	err = installFromZip(tmpZip, mw)
 	if err != nil {
 		utils.LogError(mw, "Failed to install plugin: %v", err)
@@ -241,11 +241,7 @@ func installFromZip(zipPath string, w io.Writer) error {
 	}
 	defer r.Close()
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get user home directory: %v", err)
-	}
-	installDir := filepath.Join(home, ".fins", "install")
+	installDir := filepath.Join(utils.GetFinsHome(), "install")
 
 	if _, err := os.Stat(installDir); os.IsNotExist(err) {
 		err = os.MkdirAll(installDir, 0755)

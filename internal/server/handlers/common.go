@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"finsd/internal/monitor"
+	"fins-cli/internal/monitor"
 
 	"github.com/gin-gonic/gin"
 )

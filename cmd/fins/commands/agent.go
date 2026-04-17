@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"os"
 
-	"finsd/cmd/fins/client"
-	"finsd/internal/agent"
-	"finsd/internal/utils"
+	"fins-cli/cmd/fins/client"
+	"fins-cli/internal/agent"
+	"fins-cli/internal/utils"
 
 	"github.com/spf13/cobra"
 )

@@ -1,4 +1,4 @@
-module finsd
+module fins-cli
 
 go 1.25.0
 

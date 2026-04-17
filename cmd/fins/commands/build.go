@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"finsd/cmd/fins/client"
-	"finsd/internal/utils"
+	"fins-cli/cmd/fins/client"
+	"fins-cli/internal/utils"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"

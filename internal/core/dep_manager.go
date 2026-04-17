@@ -2,8 +2,8 @@ package core
 
 import (
 	"context"
-	"finsd/internal/types"
-	"finsd/internal/utils"
+	"fins-cli/internal/types"
+	"fins-cli/internal/utils"
 	"fmt"
 	"io"
 	"os"
@@ -18,8 +18,7 @@ const (
 )
 
 func GetDepRoot() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".fins", DepDirName)
+	return filepath.Join(utils.GetFinsHome(), DepDirName)
 }
 
 func GetLogDir() string {
@@ -27,8 +26,7 @@ func GetLogDir() string {
 }
 
 func LoadGlobalRecipe(libName string) (*types.DependencyRecipe, error) {
-	home, _ := os.UserHomeDir()
-	recipePath := filepath.Join(home, ".fins", "recipes.yaml")
+	recipePath := filepath.Join(utils.GetFinsHome(), "recipes.yaml")
 
 	var config struct {
 		Recipes map[string]types.DependencyRecipe `yaml:"recipes"`

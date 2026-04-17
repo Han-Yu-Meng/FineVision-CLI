@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"finsd/internal/types"
-	"finsd/internal/utils"
+	"fins-cli/internal/types"
+	"fins-cli/internal/utils"
 )
 
 func ResolvePackageIdentity(daemonURL, inputName, targetSource string) (string, error) {

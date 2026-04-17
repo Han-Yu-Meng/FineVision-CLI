@@ -3,9 +3,9 @@ package commands
 import (
 	"bytes"
 	"encoding/json"
-	"finsd/cmd/fins/client"
-	"finsd/internal/types"
-	"finsd/internal/utils"
+	"fins-cli/cmd/fins/client"
+	"fins-cli/internal/types"
+	"fins-cli/internal/utils"
 	"fmt"
 	"net/http"
 	"os"

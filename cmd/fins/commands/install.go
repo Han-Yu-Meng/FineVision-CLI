@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"os"
 
-	"finsd/internal/utils"
+	"fins-cli/internal/utils"
 
 	"github.com/spf13/cobra"
 )
