@@ -182,14 +182,14 @@ func SolveDependencies(ctx context.Context, pkg *types.Package, writer io.Writer
 		} else {
 			globalRecipe, err := LoadGlobalRecipe(lib)
 			if err != nil {
-				utils.LogError(writer, "Failed to load recipe for %s: %v", lib, err)
-				return fmt.Errorf("failed to load recipe for %s: %v", lib, err)
+				utils.LogWarning(writer, "Recipe for '%s' not found: %v.", lib, err)
+				continue
 			}
 			activeRecipe = globalRecipe
 		}
 
 		// Handle PPA if present
-		if activeRecipe.PPA != "" {
+		if activeRecipe != nil && activeRecipe.PPA != "" {
 			if err := handlePPA(ctx, activeRecipe.PPA, writer); err != nil {
 				utils.LogError(writer, "PPA handle failed: %v", err)
 				return err
@@ -217,7 +217,7 @@ func SolveDependencies(ctx context.Context, pkg *types.Package, writer io.Writer
 				}
 			}
 			if allInstalled {
-				utils.LogInfo(writer, "System package(s) for '%s' are already installed.", lib)
+				utils.LogInfo(writer, "System package for '%s' are already installed.", lib)
 			} else {
 				utils.LogWarning(writer, "Please run 'sudo fins dep install %s' to fix missing system dependencies.", pkg.Meta.Name)
 			}
