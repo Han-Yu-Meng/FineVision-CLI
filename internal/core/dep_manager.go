@@ -207,11 +207,19 @@ func SolveDependencies(ctx context.Context, pkg *types.Package, writer io.Writer
 				sysPkg = strings.ReplaceAll(sysPkg, "${ROS_DISTRO}", rosDistro)
 			}
 
-			utils.LogSection(writer, "Ensuring system package: %s", sysPkg)
-			cmd := exec.CommandContext(ctx, "sudo", "apt-get", "install", "-y", sysPkg)
-			if err := runCommandWithColor(ctx, cmd, writer); err != nil {
-				utils.LogError(writer, "System package installation failed: %v", err)
-				return err
+			pkgs := strings.Fields(sysPkg)
+			allInstalled := true
+			for _, p := range pkgs {
+				checkCmd := exec.CommandContext(ctx, "dpkg", "-s", p)
+				if err := checkCmd.Run(); err != nil {
+					utils.LogWarning(writer, "System package '%s' (for %s) seems NOT installed. Build might fail.", p, lib)
+					allInstalled = false
+				}
+			}
+			if allInstalled {
+				utils.LogInfo(writer, "System package(s) for '%s' are already installed.", lib)
+			} else {
+				utils.LogWarning(writer, "Please run 'sudo fins dep install %s' to fix missing system dependencies.", pkg.Meta.Name)
 			}
 			continue
 		}
