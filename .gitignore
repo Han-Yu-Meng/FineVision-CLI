@@ -29,5 +29,4 @@ go.work
 build/
 dist/
 
-code_collector.py
-code_collector.md
+code_collector*
