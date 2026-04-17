@@ -86,11 +86,21 @@ var depSolveCmd = &cobra.Command{
 		deps := details.Meta.Depends
 		localRecipes := details.Meta.Recipes
 		var systemDeps []string
+		var ppas []string
 
 		for lib, ver := range deps {
 			isSystemMarked := (ver == "system")
 
-			sysPkgName := resolveSystemPackage(lib, localRecipes)
+			recipe := resolveRecipe(lib, localRecipes)
+			sysPkgName := ""
+			if recipe != nil {
+				if recipe.SystemPackage != "" {
+					sysPkgName = recipe.SystemPackage
+				}
+				if recipe.PPA != "" {
+					ppas = append(ppas, recipe.PPA)
+				}
+			}
 
 			if sysPkgName != "" {
 				pkgs := strings.Fields(sysPkgName)
@@ -100,26 +110,51 @@ var depSolveCmd = &cobra.Command{
 			}
 		}
 
-		if len(systemDeps) > 0 {
+		if len(ppas) > 0 || len(systemDeps) > 0 {
 			if os.Geteuid() != 0 {
-				utils.LogWarning(os.Stdout, "System dependencies detected: %v", systemDeps)
+				if len(ppas) > 0 {
+					utils.LogWarning(os.Stdout, "PPAs need to be added: %v", ppas)
+				}
+				if len(systemDeps) > 0 {
+					utils.LogWarning(os.Stdout, "System dependencies detected: %v", systemDeps)
+				}
 				utils.LogError(os.Stdout, "You must run this command with 'sudo' to install system packages.")
 				return
 			}
 
-			utils.LogSection(os.Stdout, "Installing system packages: %v", systemDeps)
-			aptArgs := append([]string{"install", "-y"}, systemDeps...)
-
-			cmd := exec.Command("apt-get", aptArgs...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
-
-			if err := cmd.Run(); err != nil {
-				utils.LogError(os.Stdout, "Failed to install system packages: %v", err)
-				return
+			for _, ppa := range ppas {
+				utils.LogSection(os.Stdout, "Adding PPA: %s", ppa)
+				cmd := exec.Command("add-apt-repository", "-y", ppa)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				if err := cmd.Run(); err != nil {
+					utils.LogWarning(os.Stdout, "Failed to add PPA %s: %v", ppa, err)
+				}
 			}
-			utils.LogSuccess(os.Stdout, "System dependencies installed")
+
+			if len(ppas) > 0 {
+				utils.LogSection(os.Stdout, "Updating apt package list...")
+				cmdUpdate := exec.Command("apt-get", "update")
+				cmdUpdate.Stdout = os.Stdout
+				cmdUpdate.Stderr = os.Stderr
+				cmdUpdate.Run()
+			}
+
+			if len(systemDeps) > 0 {
+				utils.LogSection(os.Stdout, "Installing system packages: %v", systemDeps)
+				aptArgs := append([]string{"install", "-y"}, systemDeps...)
+
+				cmd := exec.Command("apt-get", aptArgs...)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+
+				if err := cmd.Run(); err != nil {
+					utils.LogError(os.Stdout, "Failed to install system packages: %v", err)
+					return
+				}
+				utils.LogSuccess(os.Stdout, "System dependencies installed")
+			}
 		}
 
 		url := fmt.Sprintf("%s/api/dep/solve/%s?clear=%t", DaemonURL, pkgName, depClearCache)
@@ -138,44 +173,42 @@ var depSolveCmd = &cobra.Command{
 	},
 }
 
-func resolveSystemPackage(libName string, localRecipes map[string]types.DependencyRecipe) string {
-	var pkgName string
+func resolveRecipe(libName string, localRecipes map[string]types.DependencyRecipe) *types.DependencyRecipe {
+	var recipe *types.DependencyRecipe
 
-	if recipe, ok := localRecipes[libName]; ok {
-		if recipe.SystemPackage != "" {
-			pkgName = recipe.SystemPackage
-		}
+	if r, ok := localRecipes[libName]; ok {
+		recipe = &r
 	}
 
-	if pkgName == "" {
-		pkgName = fetchGlobalSystemPackageName(libName)
+	if recipe == nil {
+		recipe = fetchGlobalRecipe(libName)
 	}
 
-	if pkgName != "" && strings.Contains(pkgName, "${ROS_DISTRO}") {
+	if recipe != nil && strings.Contains(recipe.SystemPackage, "${ROS_DISTRO}") {
 		rosDistro := utils.GetROSDistro()
 		if rosDistro == "" {
 			utils.LogWarning(os.Stdout, "ROS_DISTRO not set and no common ROS distros found. Defaulting to 'humble'.")
 			rosDistro = "humble"
 		}
-		pkgName = strings.ReplaceAll(pkgName, "${ROS_DISTRO}", rosDistro)
+		recipe.SystemPackage = strings.ReplaceAll(recipe.SystemPackage, "${ROS_DISTRO}", rosDistro)
 	}
 
-	return pkgName
+	return recipe
 }
 
-func fetchGlobalSystemPackageName(libName string) string {
+func fetchGlobalRecipe(libName string) *types.DependencyRecipe {
 	resp, err := http.Get(fmt.Sprintf("%s/api/recipe/%s", DaemonURL, libName))
 	if err != nil || resp.StatusCode != 200 {
-		return ""
+		return nil
 	}
 	defer resp.Body.Close()
 
 	var recipe types.DependencyRecipe
 	if err := json.NewDecoder(resp.Body).Decode(&recipe); err != nil {
-		return ""
+		return nil
 	}
 
-	return recipe.SystemPackage
+	return &recipe
 }
 
 func init() {
