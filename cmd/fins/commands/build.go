@@ -144,8 +144,6 @@ var buildCmd = &cobra.Command{
 
 			done := make(chan struct{})
 
-			fmt.Println(color.CyanString("Streaming build status..."))
-
 			sigChan := make(chan os.Signal, 1)
 			signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 			ctx, cancel := context.WithCancel(context.Background())

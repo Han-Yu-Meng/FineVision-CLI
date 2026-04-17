@@ -393,12 +393,18 @@ func GetPackageAsset(c *gin.Context) {
 	}
 
 	if matchedPkg != nil {
-		if strings.Contains(relPath, "..") {
+		relPath = filepath.Clean(relPath)
+		if strings.HasPrefix(relPath, "..") || filepath.IsAbs(relPath) {
 			c.Status(403)
 			return
 		}
 
 		file := filepath.Join(matchedPkg.Path, relPath)
+		if !strings.HasPrefix(file, filepath.Clean(matchedPkg.Path)) {
+			c.Status(403)
+			return
+		}
+
 		if _, err := os.Stat(file); err == nil {
 			c.File(file)
 		} else {
