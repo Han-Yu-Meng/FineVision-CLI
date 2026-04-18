@@ -241,3 +241,7 @@ recipes:
     type: "system"
     ppa: "ppa:koide3/iridescence"
     system_pkg: "libiridescence-dev"
+  
+  zmq:
+    type: "system"
+    system_pkg: "libzmq3-dev"
