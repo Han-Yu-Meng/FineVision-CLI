@@ -190,6 +190,7 @@ recipes:
       - "-DBUILD_opencv_python2=OFF"
       - "-DBUILD_opencv_python3=OFF"
       - "-DWITH_EIGEN=OFF"
+      - "-DWITH_FFMPEG=ON"
       - "-DBUILD_ZLIB=ON"
       - "-DBUILD_JPEG=ON"
       - "-DBUILD_PNG=ON"
@@ -197,6 +198,7 @@ recipes:
       - "-DBUILD_WEBP=ON"
       - "-DWITH_OPENEXR=OFF"
       - "-DBUILD_OPENEXR=OFF"
+      - "-DVIDEOIO_ENABLE_PLUGINS=OFF"
     versions:
       "4.7.0":
         tag: "4.7.0"
