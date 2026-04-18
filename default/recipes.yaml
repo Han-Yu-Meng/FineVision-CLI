@@ -33,7 +33,7 @@ recipes:
       - "-DYAML_CPP_BUILD_TESTS=OFF"
       - "-DYAML_CPP_BUILD_TOOLS=OFF"
       - "-DYAML_CPP_BUILD_CONTRIB=OFF"
-      - "-DBUILD_SHARED_LIBS=ON"
+      - "-DBUILD_SHARED_LIBS=OFF"
     versions:
       "0.7.0":
         tag: "yaml-cpp-0.7.0"
@@ -46,7 +46,7 @@ recipes:
     cmake_args:
       - "-DFMT_TEST=OFF"
       - "-DFMT_DOC=OFF"
-      - "-DBUILD_SHARED_LIBS=ON"
+      - "-DBUILD_SHARED_LIBS=OFF"
     versions:
       "9.1.0":
         tag: "9.1.0"
@@ -60,7 +60,7 @@ recipes:
       - "-DSPDLOG_BUILD_TESTS=OFF"
       - "-DSPDLOG_BUILD_EXAMPLE=OFF"
       - "-DSPDLOG_FMT_EXTERNAL=ON"
-      - "-DBUILD_SHARED_LIBS=ON"
+      - "-DBUILD_SHARED_LIBS=OFF"
     versions:
       "1.11.0":
         tag: "v1.11.0"
