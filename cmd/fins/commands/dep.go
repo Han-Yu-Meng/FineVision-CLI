@@ -94,7 +94,7 @@ var depSolveCmd = &cobra.Command{
 			recipe := resolveRecipe(lib, localRecipes)
 			sysPkgName := ""
 			if recipe != nil {
-				if recipe.SystemPackage != "" {
+				if isSystemMarked && recipe.SystemPackage != "" {
 					sysPkgName = recipe.SystemPackage
 				}
 				if recipe.PPA != "" {
