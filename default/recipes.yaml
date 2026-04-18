@@ -195,7 +195,8 @@ recipes:
       - "-DBUILD_PNG=ON"
       - "-DBUILD_TIFF=ON"
       - "-DBUILD_WEBP=ON"
-      - "-DWITH_OPENEXR=ON"
+      - "-DWITH_OPENEXR=OFF"
+      - "-DBUILD_OPENEXR=OFF"
     versions:
       "4.7.0":
         tag: "4.7.0"
