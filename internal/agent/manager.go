@@ -170,6 +170,10 @@ func (ag *AgentInstance) Start(cfg AgentConfig, debug bool, stdout *os.File) err
 	}
 	args = append(args, "--webui", webUrl)
 
+	binDir = utils.ExpandPath(binDir)
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("LD_LIBRARY_PATH=%s", binDir))
+
 	for _, p := range cfg.Plugins {
 		soName := fmt.Sprintf("lib%s_%s.so", p.Source, p.Name)
 		soPath := utils.ExpandPath(filepath.Join(binDir, soName))
@@ -187,6 +191,8 @@ func (ag *AgentInstance) Start(cfg AgentConfig, debug bool, stdout *os.File) err
 	} else {
 		cmd = exec.Command(agentBin, args...)
 	}
+
+	cmd.Env = env
 
 	if stdout != nil {
 		ag.logFile = nil
