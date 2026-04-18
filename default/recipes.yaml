@@ -172,10 +172,33 @@ recipes:
   PCL:
     type: "system"
     system_pkg: "libpcl-dev"
-  
+
   OpenCV:
-    type: "system"
     system_pkg: "libopencv-dev"
+    
+    git: "https://github.com/opencv/opencv.git"
+    build_system: "cmake"
+    cmake_args:
+      - "-DCMAKE_BUILD_TYPE=Release"
+      - "-DBUILD_SHARED_LIBS=OFF"
+      - "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
+      - "-DBUILD_TESTS=OFF"
+      - "-DBUILD_PERF_TESTS=OFF"
+      - "-DBUILD_EXAMPLES=OFF"
+      - "-DBUILD_opencv_apps=OFF"
+      - "-DBUILD_opencv_java=OFF"
+      - "-DBUILD_opencv_python2=OFF"
+      - "-DBUILD_opencv_python3=OFF"
+      - "-DBUILD_ZLIB=ON"
+      - "-DBUILD_JPEG=ON"
+      - "-DBUILD_PNG=ON"
+      - "-DBUILD_TIFF=ON"
+      - "-DBUILD_WEBP=ON"
+    versions:
+      "4.7.0":
+        tag: "4.7.0"
+      "4.13.0":
+        tag: "4.13.0"
 
   cv_bridge:
     type: "system"
