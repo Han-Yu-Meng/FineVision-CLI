@@ -189,7 +189,7 @@ recipes:
       - "-DBUILD_opencv_java=OFF"
       - "-DBUILD_opencv_python2=OFF"
       - "-DBUILD_opencv_python3=OFF"
-      - "-DBUILD_OPENEXR=ON"
+      - "-DWITH_EIGEN=OFF"
       - "-DBUILD_ZLIB=ON"
       - "-DBUILD_JPEG=ON"
       - "-DBUILD_PNG=ON"
