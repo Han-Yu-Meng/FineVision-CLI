@@ -81,7 +81,7 @@ func runAgentLocal(debug bool) {
 	}
 
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 
 	utils.LogInfo(os.Stdout, "Agent is running. Press Ctrl+C to stop.")
 
@@ -92,7 +92,7 @@ func runAgentLocal(debug bool) {
 
 	running, pid, _ := agent.GlobalManager.GetStatus(cfg.AgentName)
 	if running && pid > 0 {
-		syscall.Kill(-pid, syscall.SIGINT)
+		syscall.Kill(-pid, syscall.SIGTERM)
 	}
 
 	done := make(chan bool)

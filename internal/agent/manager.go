@@ -289,9 +289,12 @@ func (ag *AgentInstance) Stop() error {
 		return fmt.Errorf("agent is not running")
 	}
 
-	err := syscall.Kill(-ag.pid, syscall.SIGKILL)
+	err := syscall.Kill(-ag.pid, syscall.SIGTERM)
 	if err != nil {
-		return ag.cmd.Process.Kill()
+		err = syscall.Kill(-ag.pid, syscall.SIGKILL)
+		if err != nil {
+			return ag.cmd.Process.Kill()
+		}
 	}
 
 	return nil
