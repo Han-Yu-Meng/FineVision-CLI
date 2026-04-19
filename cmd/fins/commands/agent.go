@@ -1,14 +1,15 @@
 package commands
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"fmt"
-	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	"fins-cli/cmd/fins/client"
 	"fins-cli/internal/agent"
+	"fins-cli/internal/core"
 	"fins-cli/internal/utils"
 
 	"github.com/spf13/cobra"
@@ -27,47 +28,39 @@ var agentCmd = &cobra.Command{
 
 var agentBuildCmd = &cobra.Command{
 	Use:   "build",
-	Short: "Build the fins agent binary",
+	Short: "Build the fins agent binary locally",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		url := fmt.Sprintf("%s/api/agent/build", DaemonURL)
+		utils.LogSection(os.Stdout, "Building agent binary locally...")
 
-		utils.LogSection(os.Stdout, "Requesting agent build")
-		resp, err := http.Post(url, "application/json", nil)
+		err := core.CompileAgent(context.Background(), os.Stdout)
 		if err != nil {
-			utils.LogError(os.Stdout, "Error connecting to finsd: %v", err)
+			utils.LogError(os.Stdout, "Build failed: %v", err)
 			return
 		}
-		defer resp.Body.Close()
-
-		client.StreamResponse(resp.Body)
+		utils.LogSuccess(os.Stdout, "Agent built successfully.")
 	},
 }
 
 var agentRunCmd = &cobra.Command{
 	Use:   "run",
-	Short: "Run the fins agent",
+	Short: "Run the fins agent in foreground",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		runAgent(false)
+		runAgentLocal(false)
 	},
 }
 
 var agentDebugCmd = &cobra.Command{
 	Use:   "debug",
-	Short: "Debug the fins agent with GDB",
+	Short: "Debug the fins agent with GDB in foreground",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		runAgent(true)
+		runAgentLocal(true)
 	},
 }
 
-func runAgent(debug bool) {
-	url := fmt.Sprintf("%s/api/agent/run", DaemonURL)
-	if debug {
-		url = fmt.Sprintf("%s/api/agent/debug", DaemonURL)
-	}
-
+func runAgentLocal(debug bool) {
 	cfg := agent.AgentConfig{
 		AgentName:     agentName,
 		AgentIP:       agentIP,
@@ -79,22 +72,53 @@ func runAgent(debug bool) {
 		LogLevel:      1,
 	}
 
-	body, _ := json.Marshal(cfg)
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+	utils.LogSection(os.Stdout, "Starting Agent '%s'", cfg.AgentName)
+
+	err := agent.GlobalManager.Start(cfg, debug, os.Stdout)
 	if err != nil {
-		utils.LogError(os.Stdout, "Error connecting to finsd: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		var errResp map[string]string
-		json.NewDecoder(resp.Body).Decode(&errResp)
-		utils.LogError(os.Stdout, "Failed to start agent: %s", errResp["error"])
+		utils.LogError(os.Stdout, "Failed to start agent: %v", err)
 		return
 	}
 
-	client.StreamResponseWithMessage(resp.Body, "Agent Running...")
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	utils.LogInfo(os.Stdout, "Agent is running. Press Ctrl+C to stop.")
+
+	<-sigChan
+
+	fmt.Printf("\n")
+	utils.LogWarning(os.Stdout, "Interrupt received. Attempting graceful shutdown (timeout 5s)...")
+
+	running, pid, _ := agent.GlobalManager.GetStatus(cfg.AgentName)
+	if running && pid > 0 {
+		syscall.Kill(-pid, syscall.SIGINT)
+	}
+
+	done := make(chan bool)
+	go func() {
+		for {
+			isStillRunning, _, _ := agent.GlobalManager.GetStatus(cfg.AgentName)
+			if !isStillRunning {
+				done <- true
+				return
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+	}()
+
+	select {
+	case <-done:
+		utils.LogSuccess(os.Stdout, "Agent stopped gracefully.")
+	case <-time.After(5 * time.Second):
+		utils.LogWarning(os.Stdout, "Shutdown timed out. Performing force stop...")
+		if err := agent.GlobalManager.Stop(cfg.AgentName); err != nil {
+			utils.LogError(os.Stdout, "Error force stopping agent: %v", err)
+		}
+		utils.LogSuccess(os.Stdout, "Agent force stopped.")
+	}
+
+	utils.LogSuccess(os.Stdout, "Exit.")
 }
 
 func init() {

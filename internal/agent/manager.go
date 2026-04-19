@@ -3,9 +3,11 @@ package agent
 import (
 	"fins-cli/internal/utils"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -38,6 +40,7 @@ type AgentInstance struct {
 	isRunning bool
 	mu        sync.Mutex
 	pid       int
+	lockFile  *os.File
 }
 
 type AgentManager struct {
@@ -49,36 +52,46 @@ var GlobalManager = &AgentManager{
 	agents: make(map[string]*AgentInstance),
 }
 
+func isPortInUse(port int) bool {
+	address := fmt.Sprintf(":%d", port)
+	ln, err := net.Listen("tcp", address)
+	if err != nil {
+		return true
+	}
+	ln.Close()
+	return false
+}
+
 func (m *AgentManager) Start(cfg AgentConfig, debug bool, stdout *os.File) error {
 	if cfg.AgentName == "" {
 		return fmt.Errorf("agent_name is required")
 	}
 
-	m.mu.Lock()
-
-	for name, inst := range m.agents {
-		inst.mu.Lock()
-		isRunning := inst.isRunning
-		usedPort := inst.Config.AgentPort
-		inst.mu.Unlock()
-
-		if isRunning {
-			if name == cfg.AgentName {
-				m.mu.Unlock()
-				return fmt.Errorf("agent '%s' is already running", name)
-			}
-			if usedPort == cfg.AgentPort {
-				m.mu.Unlock()
-				return fmt.Errorf("port %d is already in use by running agent '%s'", usedPort, name)
-			}
-		}
+	if isPortInUse(cfg.AgentPort) {
+		return fmt.Errorf("port %d is already in use by another process", cfg.AgentPort)
 	}
 
+	lockDir := filepath.Join(utils.GetFinsHome(), "install")
+	os.MkdirAll(lockDir, 0755)
+	lockPath := filepath.Join(lockDir, fmt.Sprintf("agent_%s.lock", cfg.AgentName))
+
+	f, err := os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return fmt.Errorf("failed to create lock file: %v", err)
+	}
+
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		f.Close()
+		return fmt.Errorf("agent '%s' is already running in another terminal", cfg.AgentName)
+	}
+
+	m.mu.Lock()
 	instance, exists := m.agents[cfg.AgentName]
 	if !exists {
 		instance = &AgentInstance{Name: cfg.AgentName}
 		m.agents[cfg.AgentName] = instance
 	}
+	instance.lockFile = f
 	m.mu.Unlock()
 
 	return instance.Start(cfg, debug, stdout)
@@ -137,15 +150,6 @@ func (ag *AgentInstance) Start(cfg AgentConfig, debug bool, stdout *os.File) err
 	ag.mu.Lock()
 	defer ag.mu.Unlock()
 
-	if ag.isRunning {
-		if ag.cmd != nil && ag.cmd.Process != nil {
-			if err := ag.cmd.Process.Signal(syscall.Signal(0)); err == nil {
-				return fmt.Errorf("agent '%s' is already running (PID: %d)", ag.Name, ag.pid)
-			}
-		}
-		ag.isRunning = false
-	}
-
 	binDir := viper.GetString("build.defaults.build_output")
 	agentBin := utils.ExpandPath(filepath.Join(binDir, "agent"))
 	if _, err := os.Stat(agentBin); os.IsNotExist(err) {
@@ -172,17 +176,38 @@ func (ag *AgentInstance) Start(cfg AgentConfig, debug bool, stdout *os.File) err
 
 	binDir = utils.ExpandPath(binDir)
 	env := os.Environ()
-	env = append(env, fmt.Sprintf("LD_LIBRARY_PATH=%s", binDir))
+
+	found := false
+	for i, e := range env {
+		if strings.HasPrefix(e, "LD_LIBRARY_PATH=") {
+			oldVal := strings.TrimPrefix(e, "LD_LIBRARY_PATH=")
+			if oldVal == "" {
+				env[i] = "LD_LIBRARY_PATH=" + binDir
+			} else if !strings.Contains(oldVal, binDir) {
+				env[i] = "LD_LIBRARY_PATH=" + binDir + ":" + oldVal
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		env = append(env, "LD_LIBRARY_PATH="+binDir)
+	}
 
 	for _, p := range cfg.Plugins {
 		soName := fmt.Sprintf("lib%s_%s.so", p.Source, p.Name)
 		soPath := utils.ExpandPath(filepath.Join(binDir, soName))
 		if _, err := os.Stat(soPath); err == nil {
 			args = append(args, "--plugin", soPath)
-		} else {
-			utils.LogWarning(os.Stdout, "Plugin %s/%s not found at %s", p.Source, p.Name, soPath)
 		}
 	}
+
+	fullCmd := agentBin + " " + strings.Join(args, " ")
+	if debug {
+		fullCmd = "gdb -ex run --args " + fullCmd
+	}
+	utils.LogSection(os.Stdout, "[%s] Starting agent (debug=%v)", ag.Name, debug)
+	utils.LogInfo(os.Stdout, "Command: %s", fullCmd)
 
 	var cmd *exec.Cmd
 	if debug {
@@ -211,7 +236,6 @@ func (ag *AgentInstance) Start(cfg AgentConfig, debug bool, stdout *os.File) err
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	utils.LogSection(os.Stdout, "[%s] Starting agent (debug=%v): %v", ag.Name, debug, cmd.Args)
 	if err := cmd.Start(); err != nil {
 		if ag.logFile != nil {
 			ag.logFile.Close()
@@ -224,24 +248,33 @@ func (ag *AgentInstance) Start(cfg AgentConfig, debug bool, stdout *os.File) err
 	ag.pid = cmd.Process.Pid
 	ag.Config = cfg
 
+	if ag.lockFile != nil {
+		ag.lockFile.Truncate(0)
+		ag.lockFile.Seek(0, 0)
+		fmt.Fprintf(ag.lockFile, "%d", ag.pid)
+	}
+
 	go func() {
 		state, _ := cmd.Process.Wait()
-
 		ag.mu.Lock()
 		defer ag.mu.Unlock()
 
 		ag.isRunning = false
 		ag.pid = 0
 
-		timestamp := time.Now().Format(time.RFC3339)
 		if ag.logFile != nil {
 			if state != nil {
-				ag.logFile.WriteString(fmt.Sprintf("\n[%s] Agent exited with code %d\n", timestamp, state.ExitCode()))
-			} else {
-				ag.logFile.WriteString(fmt.Sprintf("\n[%s] Agent exited unknown state\n", timestamp))
+				fmt.Fprintf(ag.logFile, "\n[%s] Agent exited with code %d\n", time.Now().Format(time.RFC3339), state.ExitCode())
 			}
 			ag.logFile.Close()
 			ag.logFile = nil
+		}
+
+		if ag.lockFile != nil {
+			syscall.Flock(int(ag.lockFile.Fd()), syscall.LOCK_UN)
+			ag.lockFile.Close()
+			os.Remove(filepath.Join(utils.GetFinsHome(), "install", fmt.Sprintf("agent_%s.lock", ag.Name)))
+			ag.lockFile = nil
 		}
 	}()
 
@@ -250,17 +283,15 @@ func (ag *AgentInstance) Start(cfg AgentConfig, debug bool, stdout *os.File) err
 
 func (ag *AgentInstance) Stop() error {
 	ag.mu.Lock()
+	defer ag.mu.Unlock()
+
 	if !ag.isRunning || ag.cmd == nil || ag.cmd.Process == nil {
-		ag.mu.Unlock()
 		return fmt.Errorf("agent is not running")
 	}
 
-	proc := ag.cmd.Process
-	ag.mu.Unlock()
-
-	utils.LogWarning(os.Stdout, "[%s] Force killing agent process group (PGID: %d)", ag.Name, proc.Pid)
-	if err := syscall.Kill(-proc.Pid, syscall.SIGKILL); err != nil {
-		return proc.Kill()
+	err := syscall.Kill(-ag.pid, syscall.SIGKILL)
+	if err != nil {
+		return ag.cmd.Process.Kill()
 	}
 
 	return nil
