@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	"fins-cli/cmd/fins/client"
+	"fins-cli/internal/core"
 	"fins-cli/internal/utils"
 
 	"github.com/spf13/cobra"
@@ -161,18 +163,16 @@ func handleInspectResponse(resp *http.Response) {
 var inspectBuildCmd = &cobra.Command{
 	Use:   "build",
 	Short: "Build the inspect tool binary",
+	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		url := fmt.Sprintf("%s/api/inspect/build", DaemonURL)
+		utils.LogSection(os.Stdout, "Building inspect tool binary")
 
-		utils.LogSection(os.Stdout, "Requesting inspect tool build")
-		resp, err := http.Post(url, "application/json", nil)
+		err := core.CompileInspect(context.Background(), os.Stdout)
 		if err != nil {
-			utils.LogError(os.Stdout, "Error connecting to finsd: %v", err)
+			utils.LogError(os.Stdout, "Build failed: %v", err)
 			return
 		}
-		defer resp.Body.Close()
-
-		client.StreamResponse(resp.Body)
+		utils.LogSuccess(os.Stdout, "Inspect tool built successfully.")
 	},
 }
 
