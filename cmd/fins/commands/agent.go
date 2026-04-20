@@ -28,10 +28,10 @@ var agentCmd = &cobra.Command{
 
 var agentBuildCmd = &cobra.Command{
 	Use:   "build",
-	Short: "Build the fins agent binary locally",
+	Short: "Build the fins agent binary",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		utils.LogSection(os.Stdout, "Building agent binary locally...")
+		utils.LogSection(os.Stdout, "Building agent binary")
 
 		err := core.CompileAgent(context.Background(), os.Stdout)
 		if err != nil {
