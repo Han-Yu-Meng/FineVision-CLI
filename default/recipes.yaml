@@ -205,6 +205,21 @@ recipes:
       "4.13.0":
         tag: "4.13.0"
 
+  Pangolin:
+    git: "https://github.com/stevenlovegrove/Pangolin.git"
+    build_system: "cmake"
+    cmake_args:
+      - "-DBUILD_PANGOLIN_VIDEO=OFF"
+      - "-DBUILD_PANGOLIN_PYTHON=OFF"
+      - "-DBUILD_EXAMPLES=OFF"
+      - "-DBUILD_TESTS=OFF"
+      - "-DCMAKE_BUILD_TYPE=Release"
+    versions:
+      "0.6":
+        tag: "v0.6"
+      "0.8":
+        tag: "v0.8"
+
   cv_bridge:
     type: "system"
     system_pkg: "ros-${ROS_DISTRO}-cv-bridge"
