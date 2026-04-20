@@ -16,8 +16,20 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [linux]
-        goarch: [amd64, arm64]
+        include:
+          - goos: linux
+            goarch: amd64
+            name: linux-amd64
+          - goos: linux
+            goarch: arm64
+            name: linux-arm64
+          - goos: android
+            goarch: arm64
+            name: android-arm64
+          - goos: android
+            goarch: arm
+            goarm: 7
+            name: android-armv7
 
     steps:
       - name: Checkout code
@@ -34,18 +46,26 @@ jobs:
 
       - name: Build fins (CLI)
         run: |
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 \
-          go build -ldflags="-s -w" -o dist/fins-${{ matrix.goos }}-${{ matrix.goarch }} cmd/fins/main.go
+          export GOOS=${{ matrix.goos }}
+          export GOARCH=${{ matrix.goarch }}
+          export CGO_ENABLED=0
+          if [ -n "${{ matrix.goarm }}" ]; then export GOARM=${{ matrix.goarm }}; fi
+          OUT=fins-${{ matrix.name }}
+          go build -ldflags="-s -w" -o dist/${OUT} cmd/fins/main.go
 
       - name: Build finsd (Daemon)
         run: |
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 \
-          go build -ldflags="-s -w" -o dist/finsd-${{ matrix.goos }}-${{ matrix.goarch }} cmd/finsd/main.go
+          export GOOS=${{ matrix.goos }}
+          export GOARCH=${{ matrix.goarch }}
+          export CGO_ENABLED=0
+          if [ -n "${{ matrix.goarm }}" ]; then export GOARM=${{ matrix.goarm }}; fi
+          OUT=finsd-${{ matrix.name }}
+          go build -ldflags="-s -w" -o dist/${OUT} cmd/finsd/main.go
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: binaries-${{ matrix.goarch }}
+          name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
 
   release:
@@ -67,8 +87,12 @@ jobs:
           files: |
             fins-linux-amd64
             fins-linux-arm64
+            fins-android-arm64
+            fins-android-armv7
             finsd-linux-amd64
             finsd-linux-arm64
+            finsd-android-arm64
+            finsd-android-armv7
           generate_release_notes: true
           fail_on_unmatched_files: true
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
