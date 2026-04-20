@@ -253,6 +253,10 @@ recipes:
   tbb:
     type: "system"
     system_pkg: "libtbb-dev"
+
+  boost:
+    type: "system"
+    system_pkg: "libboost-all-dev"
   
   iridescence:
     type: "system"
