@@ -23,13 +23,13 @@ jobs:
           - goos: linux
             goarch: arm64
             name: linux-arm64
-          - goos: android
+          - goos: linux
             goarch: arm64
-            name: android-arm64
-          - goos: android
+            name: termux-arm64
+          - goos: linux
             goarch: arm
             goarm: 7
-            name: android-armv7
+            name: termux-armv7
 
     steps:
       - name: Checkout code
@@ -44,11 +44,47 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      - name: Install Android NDK
+        if: matrix.goos == 'android'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip
+          wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
+          unzip -q android-ndk-r25c-linux.zip
+          echo "ANDROID_NDK_ROOT=$PWD/android-ndk-r25c" >> $GITHUB_ENV
+          echo "$PWD/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+
+      - name: Install ARM cross-compilation toolchain
+        if: startsWith(matrix.name, 'termux-')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+
       - name: Build fins (CLI)
         run: |
           export GOOS=${{ matrix.goos }}
           export GOARCH=${{ matrix.goarch }}
-          export CGO_ENABLED=0
+          if [ "${{ matrix.goos }}" = "android" ]; then 
+            export CGO_ENABLED=1
+            # Use higher API level for Termux compatibility (Android 8.0+)
+            if [ "${{ matrix.goarch }}" = "arm64" ]; then 
+              export CC=aarch64-linux-android26-clang
+            elif [ "${{ matrix.goarch }}" = "arm" ]; then 
+              export CC=armv7a-linux-androideabi26-clang
+            fi
+            # Add Termux-specific flags for better compatibility
+            export LDFLAGS="-Wl,-rpath,/data/data/com.termux/files/usr/lib"
+          elif [[ "${{ matrix.name }}" == termux-* ]]; then 
+            # Termux builds use Linux with ARM cross-compilation
+            export CGO_ENABLED=1
+            if [ "${{ matrix.goarch }}" = "arm64" ]; then 
+              export CC=aarch64-linux-gnu-gcc
+            elif [ "${{ matrix.goarch }}" = "arm" ]; then 
+              export CC=arm-linux-gnueabihf-gcc
+            fi
+          else 
+            export CGO_ENABLED=0
+          fi
           if [ -n "${{ matrix.goarm }}" ]; then export GOARM=${{ matrix.goarm }}; fi
           OUT=fins-${{ matrix.name }}
           go build -ldflags="-s -w" -o dist/${OUT} cmd/fins/main.go
@@ -57,7 +93,27 @@ jobs:
         run: |
           export GOOS=${{ matrix.goos }}
           export GOARCH=${{ matrix.goarch }}
-          export CGO_ENABLED=0
+          if [ "${{ matrix.goos }}" = "android" ]; then 
+            export CGO_ENABLED=1
+            # Use higher API level for Termux compatibility (Android 8.0+)
+            if [ "${{ matrix.goarch }}" = "arm64" ]; then 
+              export CC=aarch64-linux-android26-clang
+            elif [ "${{ matrix.goarch }}" = "arm" ]; then 
+              export CC=armv7a-linux-androideabi26-clang
+            fi
+            # Add Termux-specific flags for better compatibility
+            export LDFLAGS="-Wl,-rpath,/data/data/com.termux/files/usr/lib"
+          elif [[ "${{ matrix.name }}" == termux-* ]]; then 
+            # Termux builds use Linux with ARM cross-compilation
+            export CGO_ENABLED=1
+            if [ "${{ matrix.goarch }}" = "arm64" ]; then 
+              export CC=aarch64-linux-gnu-gcc
+            elif [ "${{ matrix.goarch }}" = "arm" ]; then 
+              export CC=arm-linux-gnueabihf-gcc
+            fi
+          else 
+            export CGO_ENABLED=0
+          fi
           if [ -n "${{ matrix.goarm }}" ]; then export GOARM=${{ matrix.goarm }}; fi
           OUT=finsd-${{ matrix.name }}
           go build -ldflags="-s -w" -o dist/${OUT} cmd/finsd/main.go
@@ -87,12 +143,12 @@ jobs:
           files: |
             fins-linux-amd64
             fins-linux-arm64
-            fins-android-arm64
-            fins-android-armv7
+            fins-termux-arm64
+            fins-termux-armv7
             finsd-linux-amd64
             finsd-linux-arm64
-            finsd-android-arm64
-            finsd-android-armv7
+            finsd-termux-arm64
+            finsd-termux-armv7
           generate_release_notes: true
           fail_on_unmatched_files: true
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
