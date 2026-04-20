@@ -44,18 +44,8 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
-      - name: Install Android NDK
-        if: matrix.goos == 'android'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip
-          wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
-          unzip -q android-ndk-r25c-linux.zip
-          echo "ANDROID_NDK_ROOT=$PWD/android-ndk-r25c" >> $GITHUB_ENV
-          echo "$PWD/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
-
       - name: Install ARM cross-compilation toolchain
-        if: startsWith(matrix.name, 'termux-')
+        if: matrix.goarch == 'arm64' || matrix.goarch == 'arm'
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
@@ -64,18 +54,16 @@ jobs:
         run: |
           export GOOS=${{ matrix.goos }}
           export GOARCH=${{ matrix.goarch }}
-          if [ "${{ matrix.goos }}" = "android" ]; then 
-            export CGO_ENABLED=1
-            # Use higher API level for Termux compatibility (Android 8.0+)
-            if [ "${{ matrix.goarch }}" = "arm64" ]; then 
-              export CC=aarch64-linux-android26-clang
-            elif [ "${{ matrix.goarch }}" = "arm" ]; then 
-              export CC=armv7a-linux-androideabi26-clang
-            fi
-            # Add Termux-specific flags for better compatibility
-            export LDFLAGS="-Wl,-rpath,/data/data/com.termux/files/usr/lib"
-          elif [[ "${{ matrix.name }}" == termux-* ]]; then 
+          if [[ "${{ matrix.name }}" == termux-* ]]; then 
             # Termux builds use Linux with ARM cross-compilation
+            export CGO_ENABLED=1
+            if [ "${{ matrix.goarch }}" = "arm64" ]; then 
+              export CC=aarch64-linux-gnu-gcc
+            elif [ "${{ matrix.goarch }}" = "arm" ]; then 
+              export CC=arm-linux-gnueabihf-gcc
+            fi
+          elif [ "${{ matrix.goarch }}" = "arm64" ] || [ "${{ matrix.goarch }}" = "arm" ]; then 
+            # Linux ARM builds need cross-compilation
             export CGO_ENABLED=1
             if [ "${{ matrix.goarch }}" = "arm64" ]; then 
               export CC=aarch64-linux-gnu-gcc
@@ -93,18 +81,16 @@ jobs:
         run: |
           export GOOS=${{ matrix.goos }}
           export GOARCH=${{ matrix.goarch }}
-          if [ "${{ matrix.goos }}" = "android" ]; then 
-            export CGO_ENABLED=1
-            # Use higher API level for Termux compatibility (Android 8.0+)
-            if [ "${{ matrix.goarch }}" = "arm64" ]; then 
-              export CC=aarch64-linux-android26-clang
-            elif [ "${{ matrix.goarch }}" = "arm" ]; then 
-              export CC=armv7a-linux-androideabi26-clang
-            fi
-            # Add Termux-specific flags for better compatibility
-            export LDFLAGS="-Wl,-rpath,/data/data/com.termux/files/usr/lib"
-          elif [[ "${{ matrix.name }}" == termux-* ]]; then 
+          if [[ "${{ matrix.name }}" == termux-* ]]; then 
             # Termux builds use Linux with ARM cross-compilation
+            export CGO_ENABLED=1
+            if [ "${{ matrix.goarch }}" = "arm64" ]; then 
+              export CC=aarch64-linux-gnu-gcc
+            elif [ "${{ matrix.goarch }}" = "arm" ]; then 
+              export CC=arm-linux-gnueabihf-gcc
+            fi
+          elif [ "${{ matrix.goarch }}" = "arm64" ] || [ "${{ matrix.goarch }}" = "arm" ]; then 
+            # Linux ARM builds need cross-compilation
             export CGO_ENABLED=1
             if [ "${{ matrix.goarch }}" = "arm64" ]; then 
               export CC=aarch64-linux-gnu-gcc
