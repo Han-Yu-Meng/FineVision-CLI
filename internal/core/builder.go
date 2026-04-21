@@ -354,7 +354,7 @@ include_directories("%[7]s/include")
 %[4]s
 
 # === USE PRE-BUILT SDK STATIC LIBRARY ===
-add_library(fins_sdk STATIC IMPORTED)
+add_library(fins_sdk STATIC IMPORTED GLOBAL)
 set_target_properties(fins_sdk PROPERTIES
     IMPORTED_LOCATION "%[7]s/lib/libfins_sdk_static.a"
     INTERFACE_INCLUDE_DIRECTORIES "%[7]s/include;%[7]s/include/fins/third_party/fmt/include"
