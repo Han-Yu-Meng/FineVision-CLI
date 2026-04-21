@@ -120,7 +120,8 @@ find_package(Threads REQUIRED)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -fPIC")
+# Force add -DFMT_HEADER_ONLY
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -fPIC -DFMT_HEADER_ONLY")
 
 %[1]s
 
@@ -134,13 +135,12 @@ list(FILTER SDK_SOURCES EXCLUDE REGEX ".*/inspect/.*")
 
 message(STATUS "[FINS] SDK Sources: ${SDK_SOURCES}")
 
-# Find and link fmt library
-find_package(fmt REQUIRED)
-
-# Build SDK as STATIC library
 add_library(fins_sdk_static STATIC ${SDK_SOURCES})
-target_include_directories(fins_sdk_static PUBLIC "%[2]s")
-target_link_libraries(fins_sdk_static PUBLIC fmt::fmt Threads::Threads ${CMAKE_DL_LIBS})
+target_include_directories(fins_sdk_static PUBLIC 
+    "%[2]s"
+    "%[2]s/fins/third_party/fmt/include"
+)
+target_link_libraries(fins_sdk_static PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
 
 # Install the static library and headers
 install(TARGETS fins_sdk_static 
@@ -287,6 +287,7 @@ func CompilePackageStream(ctx context.Context, pkgName string, rawWriter io.Writ
 
 	depRoot := GetDepRoot()
 	var depPaths []string
+	var rpathEntries []string
 
 	for lib, ver := range pkg.Meta.Depends {
 		if ver == "system" {
@@ -295,9 +296,12 @@ func CompilePackageStream(ctx context.Context, pkgName string, rawWriter io.Writ
 		path := filepath.Join(depRoot, "install", lib, ver)
 		path = filepath.ToSlash(path)
 		depPaths = append(depPaths, path)
+		// Add dependency lib directories to RPATH
+		rpathEntries = append(rpathEntries, filepath.Join(path, "lib"))
 	}
 
 	cmakePrefixPath := strings.Join(depPaths, ";")
+	cmakeRpath := strings.Join(rpathEntries, ";")
 
 	var preLoadDeps strings.Builder
 	for lib, ver := range pkg.Meta.Depends {
@@ -322,15 +326,24 @@ project(fins_wrapper LANGUAGES CXX)
 
 find_package(Threads REQUIRED)
 
+# Set RPATH to automatically find dependency libraries (solve onnxruntime etc loading issues)
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+set(CMAKE_INSTALL_RPATH "%[7]s;%[7]s/lib;%[8]s")
+
 set(FINS_DEP_PATHS "%[1]s")
 if(FINS_DEP_PATHS)
 	list(INSERT CMAKE_PREFIX_PATH 0 ${FINS_DEP_PATHS})
-	message(STATUS "FINS: Injected local dependencies: ${CMAKE_PREFIX_PATH}")
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -fPIC")
+# Globally force define FMT_HEADER_ONLY to prevent subproject overrides
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -fPIC -DFMT_HEADER_ONLY")
+add_compile_definitions(FMT_HEADER_ONLY)
+
+# Ensure internal fmt header path has highest priority
+include_directories(BEFORE "%[7]s/include/fins/third_party/fmt/include")
+include_directories("%[7]s/include")
 
 # --- FINS PRE-LOAD DEPENDENCIES ---
 %[2]s
@@ -341,19 +354,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -fPIC")
 %[4]s
 
 # === USE PRE-BUILT SDK STATIC LIBRARY ===
-message(STATUS "[FINS] Using pre-built SDK static library")
-
-# Add SDK include directory
-include_directories("%[7]s/include")
-
-# Create interface target for the pre-built SDK static library
 add_library(fins_sdk STATIC IMPORTED)
 set_target_properties(fins_sdk PROPERTIES
     IMPORTED_LOCATION "%[7]s/lib/libfins_sdk_static.a"
-    INTERFACE_INCLUDE_DIRECTORIES "%[7]s/include"
+    INTERFACE_INCLUDE_DIRECTORIES "%[7]s/include;%[7]s/include/fins/third_party/fmt/include"
 )
 
-# Link required dependencies for the SDK
 target_link_libraries(fins_sdk INTERFACE 
     Threads::Threads 
     ${CMAKE_DL_LIBS}
@@ -363,18 +369,18 @@ add_library(fins_shared ALIAS fins_sdk)
 
 macro(fins_add_node _target)
     add_library(${_target} SHARED ${ARGN})
-    
-    # Link against pre-built SDK static library
     target_link_libraries(${_target} PRIVATE 
         fins_sdk
         Threads::Threads
         ${CMAKE_DL_LIBS}
     )
-    
-    target_compile_definitions(${_target} PRIVATE FINS_NODE)
+    # Force confirm macro definition for each node
+    target_compile_definitions(${_target} PRIVATE FMT_HEADER_ONLY FINS_NODE)
     set_target_properties(${_target} PROPERTIES 
         OUTPUT_NAME "${PKG_SOURCE}_${_target}"
         POSITION_INDEPENDENT_CODE ON
+        # Ensure dynamic library includes RPATH
+        INSTALL_RPATH "%[7]s;%[7]s/lib;%[8]s"
     )
 endmacro()
 
@@ -390,7 +396,7 @@ add_subdirectory("%[6]s" "${CMAKE_BINARY_DIR}/node_build")
 if(TARGET ${FINS_META_NAME})
     set_target_properties(${FINS_META_NAME} PROPERTIES OUTPUT_NAME "${FINS_META_SOURCE}_${FINS_META_NAME}")
 endif()
-`, cmakePrefixPath, preLoadDeps.String(), wslSanitizeLogic, link_ros_dependencies, sdkPath, pkg.Path, installDir)
+`, cmakePrefixPath, preLoadDeps.String(), wslSanitizeLogic, link_ros_dependencies, sdkPath, pkg.Path, installDir, cmakeRpath)
 
 	os.WriteFile(filepath.Join(buildDir, "CMakeLists.txt"), []byte(wrapperContent), 0644)
 
