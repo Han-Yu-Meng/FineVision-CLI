@@ -96,6 +96,100 @@ macro(fins_optional_ros_dependency target pkg_name)
 endmacro()
 `
 
+func CompileSDKStatic(ctx context.Context) error {
+	sdkPath := utils.ExpandPath(viper.GetString("build.defaults.sdk_path"))
+	installDir := utils.ExpandPath(viper.GetString("build.defaults.build_output"))
+
+	// Build SDK static library in dedicated directory
+	sdkBuildDir := filepath.Join(utils.GetFinsHome(), "build", "sdk_static")
+	if err := os.MkdirAll(sdkBuildDir, 0755); err != nil {
+		return fmt.Errorf("failed to create SDK build directory: %v", err)
+	}
+
+	// Ensure install lib directory exists
+	libDir := filepath.Join(installDir, "lib")
+	if err := os.MkdirAll(libDir, 0755); err != nil {
+		return fmt.Errorf("failed to create install lib directory: %v", err)
+	}
+
+	wrapperContent := fmt.Sprintf(`
+cmake_minimum_required(VERSION 3.16)
+project(fins_sdk_static LANGUAGES CXX)
+
+find_package(Threads REQUIRED)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -fPIC")
+
+%[1]s
+
+# === COLLECT SDK SOURCES ===
+file(GLOB_RECURSE SDK_SOURCES 
+    "%[2]s/fins/*.cpp"
+)
+# Exclude agent/inspect sources from SDK library
+list(FILTER SDK_SOURCES EXCLUDE REGEX ".*/agent/.*")
+list(FILTER SDK_SOURCES EXCLUDE REGEX ".*/inspect/.*")
+
+message(STATUS "[FINS] SDK Sources: ${SDK_SOURCES}")
+
+# Find and link fmt library
+find_package(fmt REQUIRED)
+
+# Build SDK as STATIC library
+add_library(fins_sdk_static STATIC ${SDK_SOURCES})
+target_include_directories(fins_sdk_static PUBLIC "%[2]s")
+target_link_libraries(fins_sdk_static PUBLIC fmt::fmt Threads::Threads ${CMAKE_DL_LIBS})
+
+# Install the static library and headers
+install(TARGETS fins_sdk_static 
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+
+install(DIRECTORY "%[2]s/fins/" 
+    DESTINATION include/fins
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+)
+`, wslSanitizeLogic, sdkPath)
+
+	cmakeListsPath := filepath.Join(sdkBuildDir, "CMakeLists.txt")
+	if err := os.WriteFile(cmakeListsPath, []byte(wrapperContent), 0644); err != nil {
+		return fmt.Errorf("failed to write SDK CMakeLists.txt: %v", err)
+	}
+
+	// Configure SDK build
+	args := []string{
+		"-B", sdkBuildDir,
+		"-S", sdkBuildDir,
+		"-G", viper.GetString("build.defaults.cmake_generator"),
+		fmt.Sprintf("-DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=%s", filepath.Join(installDir, "lib")),
+		fmt.Sprintf("-DCMAKE_INSTALL_PREFIX=%s", installDir),
+		"-DCMAKE_BUILD_TYPE=Release",
+	}
+
+	cmdConfig := exec.CommandContext(ctx, "cmake", args...)
+	if err := runCommandWithColor(ctx, cmdConfig, os.Stdout); err != nil {
+		return fmt.Errorf("SDK CMake config failed: %v", err)
+	}
+
+	// Build SDK static library
+	cmdBuild := exec.CommandContext(ctx, "cmake", "--build", sdkBuildDir, "-j", "4")
+	if err := runCommandWithColor(ctx, cmdBuild, os.Stdout); err != nil {
+		return fmt.Errorf("SDK build failed: %v", err)
+	}
+
+	// Install SDK
+	cmdInstall := exec.CommandContext(ctx, "cmake", "--install", sdkBuildDir)
+	if err := runCommandWithColor(ctx, cmdInstall, os.Stdout); err != nil {
+		return fmt.Errorf("SDK install failed: %v", err)
+	}
+
+	return nil
+}
+
 func getMoldLibexec() string {
 	paths := []string{
 		"/usr/libexec/mold",
@@ -181,6 +275,16 @@ func CompilePackageStream(ctx context.Context, pkgName string, rawWriter io.Writ
 		return err
 	}
 
+	// Check if SDK static library exists, build it if not
+	installDir := utils.ExpandPath(viper.GetString("build.defaults.build_output"))
+	sdkStaticLib := filepath.Join(installDir, "lib", "libfins_sdk_static.a")
+	if _, err := os.Stat(sdkStaticLib); os.IsNotExist(err) {
+		utils.LogSection(rawWriter, "Building SDK static library...")
+		if err := CompileSDKStatic(ctx); err != nil {
+			return fmt.Errorf("failed to build SDK static library: %v", err)
+		}
+	}
+
 	depRoot := GetDepRoot()
 	var depPaths []string
 
@@ -218,7 +322,7 @@ project(fins_wrapper LANGUAGES CXX)
 
 find_package(Threads REQUIRED)
 
-set(FINS_DEP_PATHS "%s")
+set(FINS_DEP_PATHS "%[1]s")
 if(FINS_DEP_PATHS)
 	list(INSERT CMAKE_PREFIX_PATH 0 ${FINS_DEP_PATHS})
 	message(STATUS "FINS: Injected local dependencies: ${CMAKE_PREFIX_PATH}")
@@ -229,19 +333,50 @@ set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -fPIC")
 
 # --- FINS PRE-LOAD DEPENDENCIES ---
-%s
+%[2]s
 # ----------------------------------
+
+%[3]s
+
+%[4]s
+
+# === USE PRE-BUILT SDK STATIC LIBRARY ===
+message(STATUS "[FINS] Using pre-built SDK static library")
+
+# Add SDK include directory
+include_directories("%[7]s/include")
+
+# Create interface target for the pre-built SDK static library
+add_library(fins_sdk STATIC IMPORTED)
+set_target_properties(fins_sdk PROPERTIES
+    IMPORTED_LOCATION "%[7]s/lib/libfins_sdk_static.a"
+    INTERFACE_INCLUDE_DIRECTORIES "%[7]s/include"
+)
+
+# Link required dependencies for the SDK
+target_link_libraries(fins_sdk INTERFACE 
+    Threads::Threads 
+    ${CMAKE_DL_LIBS}
+)
+
+add_library(fins_shared ALIAS fins_sdk)
 
 macro(fins_add_node _target)
     add_library(${_target} SHARED ${ARGN})
-    target_link_libraries(${_target} PRIVATE fins_sdk)
-    set_target_properties(${_target} PROPERTIES OUTPUT_NAME "${PKG_SOURCE}_${_target}")
+    
+    # Link against pre-built SDK static library
+    target_link_libraries(${_target} PRIVATE 
+        fins_sdk
+        Threads::Threads
+        ${CMAKE_DL_LIBS}
+    )
+    
     target_compile_definitions(${_target} PRIVATE FINS_NODE)
+    set_target_properties(${_target} PROPERTIES 
+        OUTPUT_NAME "${PKG_SOURCE}_${_target}"
+        POSITION_INDEPENDENT_CODE ON
+    )
 endmacro()
-
-%s
-
-%s
 
 add_compile_definitions(PKG_NAME="${FINS_META_NAME}")
 add_compile_definitions(PKG_VERSION="${FINS_META_VERSION}")
@@ -249,13 +384,13 @@ add_compile_definitions(PKG_MAINTAINER="${FINS_META_MAINTAINER}")
 add_compile_definitions(PKG_DESCRIPTION="${FINS_META_DESC}")
 add_compile_definitions(PKG_SOURCE="${FINS_META_SOURCE}")
 
-add_subdirectory("%s" "${CMAKE_BINARY_DIR}/sdk_build")
-add_subdirectory("%s" "${CMAKE_BINARY_DIR}/node_build")
+# 3. Only compile package source
+add_subdirectory("%[6]s" "${CMAKE_BINARY_DIR}/node_build")
 
 if(TARGET ${FINS_META_NAME})
     set_target_properties(${FINS_META_NAME} PROPERTIES OUTPUT_NAME "${FINS_META_SOURCE}_${FINS_META_NAME}")
 endif()
-`, cmakePrefixPath, preLoadDeps.String(), wslSanitizeLogic, link_ros_dependencies, sdkPath, pkg.Path)
+`, cmakePrefixPath, preLoadDeps.String(), wslSanitizeLogic, link_ros_dependencies, sdkPath, pkg.Path, installDir)
 
 	os.WriteFile(filepath.Join(buildDir, "CMakeLists.txt"), []byte(wrapperContent), 0644)
 
@@ -363,14 +498,11 @@ func CleanAllBuilds() error {
 		}
 	}
 
-	sdkPath := utils.ExpandPath(viper.GetString("build.defaults.sdk_path"))
-	coreExes := []string{"agent", "inspect"}
-	for _, name := range coreExes {
-		buildPath := filepath.Join(sdkPath, "fins", name, "build")
-		if _, err := os.Stat(buildPath); err == nil {
-			utils.LogSection(os.Stdout, "Cleaning %s", buildPath)
-			os.RemoveAll(buildPath)
-		}
+	// Clean isolated core build directory
+	coreBuildRoot := filepath.Join(utils.GetFinsHome(), "build", "core")
+	if _, err := os.Stat(coreBuildRoot); err == nil {
+		utils.LogSection(os.Stdout, "Cleaning %s", coreBuildRoot)
+		os.RemoveAll(coreBuildRoot)
 	}
 
 	return nil
@@ -382,7 +514,8 @@ func CompileExe(ctx context.Context, writer io.Writer, name string) error {
 	binDir := utils.ExpandPath(viper.GetString("build.defaults.build_output"))
 
 	exeSourceDir := filepath.Join(sdkPath, "fins", name)
-	buildDir := filepath.Join(exeSourceDir, "build")
+
+	buildDir := filepath.Join(utils.GetFinsHome(), "build", "core", name)
 	os.MkdirAll(buildDir, 0755)
 
 	srcPath := filepath.Join(exeSourceDir, name+".cpp")
@@ -390,6 +523,8 @@ func CompileExe(ctx context.Context, writer io.Writer, name string) error {
 	wrapperContent := fmt.Sprintf(`
 cmake_minimum_required(VERSION 3.16)
 project(fins_%[1]s_wrapper)
+
+find_package(Threads REQUIRED)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
@@ -401,7 +536,17 @@ add_subdirectory("%[3]s" "${CMAKE_BINARY_DIR}/sdk_build")
 if(EXISTS "%[4]s")
     add_executable(%[1]s "%[4]s")
     
-    target_link_libraries(%[1]s PRIVATE fins_sdk ${CMAKE_DL_LIBS})
+    # Force whole archive to ensure all symbols (singletons, etc) are baked into the binary
+    # and ready to be exported via -rdynamic for plugins.
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_link_libraries(%[1]s PRIVATE 
+            -Wl,--whole-archive fins_sdk -Wl,--no-whole-archive 
+            ${CMAKE_DL_LIBS}
+            Threads::Threads
+        )
+    else()
+        target_link_libraries(%[1]s PRIVATE fins_sdk ${CMAKE_DL_LIBS})
+    endif()
     
     set_target_properties(%[1]s PROPERTIES ENABLE_EXPORTS ON)
 else()
@@ -429,22 +574,24 @@ endif()
 		fmt.Sprintf("-DCMAKE_BUILD_TYPE=%s", buildType),
 	}
 
+	linkerFlags := "-rdynamic"
 	if _, err := exec.LookPath("mold"); err == nil {
 		useFuseLd := false
 		if out, err := exec.Command("gcc", "-dumpversion").Output(); err == nil {
-			major := strings.Split(string(out), ".")[0]
+			major := strings.Split(strings.TrimSpace(string(out)), ".")[0]
 			if major >= "10" {
 				useFuseLd = true
 			}
 		}
 
 		if useFuseLd {
-			args = append(args, "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold")
+			linkerFlags += " -fuse-ld=mold"
 		} else {
 			moldLibexec := getMoldLibexec()
-			args = append(args, fmt.Sprintf("-DCMAKE_EXE_LINKER_FLAGS=-B%s", moldLibexec))
+			linkerFlags += fmt.Sprintf(" -B%s", moldLibexec)
 		}
 	}
+	args = append(args, fmt.Sprintf("-DCMAKE_EXE_LINKER_FLAGS=%s", linkerFlags))
 
 	utils.LogSection(writer, "Configuring %s (Type: %s)", name, buildType)
 	buildWriter := utils.NewBuildWriter(writer)
