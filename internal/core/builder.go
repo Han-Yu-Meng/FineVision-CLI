@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"fins-cli/internal/types"
 	"fins-cli/internal/utils"
 
 	"github.com/spf13/viper"
@@ -285,7 +286,6 @@ func CompilePackageStream(ctx context.Context, pkgName string, rawWriter io.Writ
 		}
 	}
 
-	depRoot := GetDepRoot()
 	var depPaths []string
 	var rpathEntries []string
 
@@ -293,11 +293,23 @@ func CompilePackageStream(ctx context.Context, pkgName string, rawWriter io.Writ
 		if ver == "system" {
 			continue
 		}
-		path := filepath.Join(depRoot, "install", lib, ver)
-		path = filepath.ToSlash(path)
-		depPaths = append(depPaths, path)
-		// Add dependency lib directories to RPATH
-		rpathEntries = append(rpathEntries, filepath.Join(path, "lib"))
+
+		// --- Key modification: Get hash-based paths ---
+		var recipe *types.DependencyRecipe
+		if r, ok := pkg.Meta.Recipes[lib]; ok {
+			recipe = &r
+		} else {
+			recipe, _ = LoadGlobalRecipe(lib)
+		}
+
+		if recipe != nil {
+			// Call dep_manager's public logic to get paths
+			installPath, _, _, _ := GetDependencyPaths(lib, ver, recipe)
+			path := filepath.ToSlash(installPath)
+			depPaths = append(depPaths, path)
+			// Add dependency lib directories to RPATH
+			rpathEntries = append(rpathEntries, filepath.Join(path, "lib"))
+		}
 	}
 
 	cmakePrefixPath := strings.Join(depPaths, ";")
@@ -326,7 +338,6 @@ project(fins_wrapper LANGUAGES CXX)
 
 find_package(Threads REQUIRED)
 
-# Set RPATH to automatically find dependency libraries (solve onnxruntime etc loading issues)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 set(CMAKE_INSTALL_RPATH "%[7]s;%[7]s/lib;%[8]s")
 
@@ -374,12 +385,10 @@ macro(fins_add_node _target)
         Threads::Threads
         ${CMAKE_DL_LIBS}
     )
-    # Force confirm macro definition for each node
     target_compile_definitions(${_target} PRIVATE FMT_HEADER_ONLY FINS_NODE)
     set_target_properties(${_target} PROPERTIES 
         OUTPUT_NAME "${PKG_SOURCE}_${_target}"
         POSITION_INDEPENDENT_CODE ON
-        # Ensure dynamic library includes RPATH
         INSTALL_RPATH "%[7]s;%[7]s/lib;%[8]s"
     )
 endmacro()
@@ -390,7 +399,6 @@ add_compile_definitions(PKG_MAINTAINER="${FINS_META_MAINTAINER}")
 add_compile_definitions(PKG_DESCRIPTION="${FINS_META_DESC}")
 add_compile_definitions(PKG_SOURCE="${FINS_META_SOURCE}")
 
-# 3. Only compile package source
 add_subdirectory("%[6]s" "${CMAKE_BINARY_DIR}/node_build")
 
 if(TARGET ${FINS_META_NAME})

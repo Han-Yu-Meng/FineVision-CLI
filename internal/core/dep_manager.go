@@ -2,6 +2,8 @@ package core
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"fins-cli/internal/types"
 	"fins-cli/internal/utils"
 	"fmt"
@@ -17,6 +19,32 @@ import (
 const (
 	DepDirName = "dependencies"
 )
+
+func calculateArgsHash(args []string) string {
+	if len(args) == 0 {
+		return "default"
+	}
+	h := sha1.New()
+	h.Write([]byte(strings.Join(args, "|")))
+	return hex.EncodeToString(h.Sum(nil))[:8]
+}
+
+func GetDependencyPaths(libName, version string, recipe *types.DependencyRecipe) (install, source, build string, hash string) {
+	root := GetDepRoot()
+
+	allArgs := append([]string{}, recipe.CMakeArgs...)
+	if v, ok := recipe.Versions[version]; ok {
+		allArgs = append(allArgs, v.CMakeArgs...)
+	}
+
+	hash = calculateArgsHash(allArgs)
+	verHash := fmt.Sprintf("%s-%s", version, hash)
+
+	install = filepath.Join(root, "install", libName, verHash)
+	source = filepath.Join(root, "sources", libName, version)
+	build = filepath.Join(root, "build", libName, verHash)
+	return
+}
 
 func GetDepRoot() string {
 	return filepath.Join(utils.GetFinsHome(), DepDirName)
@@ -66,10 +94,8 @@ func LoadGlobalRecipe(libName string) (*types.DependencyRecipe, error) {
 }
 
 func BuildDependency(ctx context.Context, libName, version string, recipe *types.DependencyRecipe, writer io.Writer, clearCache bool) error {
-	root := GetDepRoot()
-	installPath := filepath.Join(root, "install", libName, version)
-	sourceDir := filepath.Join(root, "sources", libName, version)
-	buildDir := filepath.Join(root, "build", libName, version)
+	// Get hash-based paths
+	installPath, sourceDir, buildDir, _ := GetDependencyPaths(libName, version, recipe)
 
 	if clearCache {
 		utils.LogSection(writer, "Clearing build cache for %s/%s", libName, version)
@@ -85,16 +111,12 @@ func BuildDependency(ctx context.Context, libName, version string, recipe *types
 	targetGitURL := recipe.GitURL
 	targetTag := version
 
-	var versionSpecificArgs []string
 	if v, ok := recipe.Versions[version]; ok {
 		if v.GitURL != "" {
 			targetGitURL = v.GitURL
 		}
 		if v.Tag != "" {
 			targetTag = v.Tag
-		}
-		if len(v.CMakeArgs) > 0 {
-			versionSpecificArgs = v.CMakeArgs
 		}
 	}
 
@@ -112,21 +134,32 @@ func BuildDependency(ctx context.Context, libName, version string, recipe *types
 	buildWriter := utils.NewBuildWriter(writer)
 
 	if _, err := os.Stat(filepath.Join(sourceDir, ".git")); os.IsNotExist(err) {
-		utils.LogSection(writer, "Cloning %s (%s)", libName, version)
-		utils.LogInfo(writer, "Repo: %s", targetGitURL)
-		cmd := exec.CommandContext(ctx, "git", "clone", "--recursive", targetGitURL, sourceDir)
+		utils.LogSection(writer, "Cloning %s (Tag: %s) [Shallow]", libName, targetTag)
+
+		cloneArgs := []string{
+			"clone",
+			"--depth", "1",
+			"--branch", targetTag,
+			"--recursive",
+			"--shallow-submodules",
+			targetGitURL,
+			sourceDir,
+		}
+
+		cmd := exec.CommandContext(ctx, "git", cloneArgs...)
 		if err := runCommandWithColor(ctx, cmd, buildWriter); err != nil {
 			os.RemoveAll(sourceDir)
-			return fmt.Errorf("git clone failed: %v", err)
+			return fmt.Errorf("git shallow clone failed: %v", err)
 		}
+	} else {
+		// If source code already exists, ensure it's the correct Tag
+		utils.LogInfo(writer, "Source exists, ensuring ref: %s", targetTag)
+		cmdCheckout := exec.CommandContext(ctx, "git", "checkout", targetTag)
+		cmdCheckout.Dir = sourceDir
+		runCommandWithColor(ctx, cmdCheckout, buildWriter)
 	}
 
-	utils.LogSection(writer, "Checking out ref: %s", targetTag)
-	cmdCheckout := exec.CommandContext(ctx, "git", "checkout", targetTag)
-	cmdCheckout.Dir = sourceDir
-	runCommandWithColor(ctx, cmdCheckout, buildWriter)
-
-	globalInstallRoot := filepath.Join(root, "install")
+	globalInstallRoot := filepath.Join(GetDepRoot(), "install")
 	args := []string{
 		"-S", sourceDir,
 		"-B", buildDir,
@@ -136,9 +169,8 @@ func BuildDependency(ctx context.Context, libName, version string, recipe *types
 	}
 
 	args = append(args, recipe.CMakeArgs...)
-	if len(versionSpecificArgs) > 0 {
-		utils.LogSection(writer, "Applying version-specific CMake args for %s %s", libName, version)
-		args = append(args, versionSpecificArgs...)
+	if v, ok := recipe.Versions[version]; ok {
+		args = append(args, v.CMakeArgs...)
 	}
 
 	utils.LogSection(writer, "Configuring %s %s", libName, version)
