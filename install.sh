@@ -200,16 +200,63 @@ sudo chown -R "$REAL_USER":"$REAL_USER" "$FINS_DIR"
 
 log_success "Configuration files download complete."
 
+log_info "Configuring systemd service for finsd..."
+
+SERVICE_FILE="/etc/systemd/system/finsd.service"
+
+sudo systemctl stop finsd 2>/dev/null || true
+
+sudo tee $SERVICE_FILE > /dev/null << 'EOF'
+[Unit]
+Description=Finsd Service
+After=network.target
+
+[Service]
+Type=simple
+User=REPLACE_USER
+Group=REPLACE_USER
+Environment="HOME=REPLACE_HOME"
+Environment="USER=REPLACE_USER"
+Environment="SHELL=/bin/bash"
+WorkingDirectory=REPLACE_HOME
+
+ExecStart=/bin/bash -c 'eval "$$(sed "/[[ $$- != *i* ]] && return/d; /\[ -z \"$$PS1\" \] && return/d" REPLACE_HOME/.bashrc)"; exec /usr/local/bin/finsd'
+
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+log_info "Personalizing service file for user: $REAL_USER"
+sudo sed -i "s|REPLACE_USER|$REAL_USER|g" $SERVICE_FILE
+sudo sed -i "s|REPLACE_HOME|$REAL_HOME|g" $SERVICE_FILE
+
+log_info "Reloading systemd and starting finsd..."
+sudo systemctl daemon-reload
+sudo systemctl enable finsd
+sudo systemctl restart finsd
+
+sleep 2
+if systemctl is-active --quiet finsd; then
+    log_success "finsd service is running."
+    
+    MAIN_PID=$(systemctl show --property=MainPID finsd | cut -d= -f2)
+    if [ "$MAIN_PID" != "0" ]; then
+        log_info "Verifying ROS Environment for PID $MAIN_PID:"
+        sudo cat /proc/$MAIN_PID/environ | tr '\0' '\n' | grep -E "ROS_DISTRO|PATH|LD_LIBRARY_PATH|PYTHONPATH" | sed 's/^/  - /'
+    fi
+else
+    log_error "Service failed to start. Run 'journalctl -u finsd -n 20' for debugging."
+fi
+
 echo ""
 # 6. Final Tips
 echo ""
 echo -e "${GREEN}======================================================================${NC}"
 echo -e "${GREEN}  🎉 FINS Installation Complete!${NC}"
 echo -e "${GREEN}======================================================================${NC}"
-echo ""
-echo -e "To start the background daemon ${YELLOW}finsd${NC}, please run:"
-echo -e "  ${BLUE}nohup finsd > /dev/null 2>&1 &${NC}"
-echo ""
 echo -e "${RED}[Important Next Steps]${NC}"
 echo -e "To use Agent and Inspect features correctly, please run the following commands to compile internal tools:"
 echo ""
