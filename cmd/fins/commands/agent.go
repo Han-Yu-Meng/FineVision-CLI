@@ -65,14 +65,12 @@ func runAgentLocal(debug bool) {
 		AgentName:     agentName,
 		AgentIP:       agentIP,
 		AgentPort:     agentPort,
-		UrgentThreads: 4,
-		HighThreads:   4,
-		MediumThreads: 4,
-		LowThreads:    4,
+		UrgentThreads: 2,
+		HighThreads:   2,
+		MediumThreads: 0,
+		LowThreads:    0,
 		LogLevel:      1,
 	}
-
-	utils.LogSection(os.Stdout, "Starting Agent '%s'", cfg.AgentName)
 
 	err := agent.GlobalManager.Start(cfg, debug, os.Stdout)
 	if err != nil {
