@@ -87,11 +87,23 @@ check_packages() {
     echo "${missing_pkgs[@]}"
 }
 
-REQUIRED_PKGS=("ninja-build" "build-essential" "curl" "jq" "wget")
+REQUIRED_PKGS=("ninja-build" "build-essential" "curl" "jq" "wget" "aria2")
 UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "0.0")
 if (( $(echo "$UBUNTU_VERSION >= 22.04" | bc -l) )); then
     REQUIRED_PKGS+=("mold")
 fi
+
+download_file() {
+    local url=$1
+    local output=$2
+    local name=$3
+    log_info "Downloading $name with multi-threaded aria2..."
+    if ! sudo aria2c -x 16 -s 16 -d "$(dirname "$output")" -o "$(basename "$output")" "$url"; then
+        log_error "Failed to download $name from $url"
+        return 1
+    fi
+    return 0
+}
 
 MISSING_PKGS=$(check_packages "${REQUIRED_PKGS[@]}")
 
@@ -165,15 +177,12 @@ if [ -z "$FINS_URL" ] || [ -z "$FINSD_URL" ]; then
     exit 1
 fi
 
-log_info "Downloading fins : $FINS_URL"
-if ! sudo curl -L "$FINS_URL" -o /usr/local/bin/fins; then
-    log_error "Failed to download fins from $FINS_URL"
+# Download binary files using aria2 (multi-threaded)
+if ! download_file "$FINS_URL" "/usr/local/bin/fins" "fins"; then
     exit 1
 fi
 
-log_info "Downloading finsd: $FINSD_URL"
-if ! sudo curl -L "$FINSD_URL" -o /usr/local/bin/finsd; then
-    log_error "Failed to download finsd from $FINSD_URL"
+if ! download_file "$FINSD_URL" "/usr/local/bin/finsd" "finsd"; then
     exit 1
 fi
 
@@ -193,8 +202,8 @@ sudo -u "$REAL_USER" mkdir -p "$FINS_DIR/logs"
 CONFIG_URL="${GH_PROXY}https://raw.githubusercontent.com/$GITHUB_USER/$GITHUB_REPO/$BRANCH/default/config.yaml"
 RECIPE_URL="${GH_PROXY}https://raw.githubusercontent.com/$GITHUB_USER/$GITHUB_REPO/$BRANCH/default/recipes.yaml"
 
-sudo -u "$REAL_USER" curl -sL "$CONFIG_URL" -o "$FINS_DIR/config.yaml"
-sudo -u "$REAL_USER" curl -sL "$RECIPE_URL" -o "$FINS_DIR/recipes.yaml"
+sudo -u "$REAL_USER" wget -q "$CONFIG_URL" -O "$FINS_DIR/config.yaml"
+sudo -u "$REAL_USER" wget -q "$RECIPE_URL" -O "$FINS_DIR/recipes.yaml"
 
 sudo chown -R "$REAL_USER":"$REAL_USER" "$FINS_DIR"
 
