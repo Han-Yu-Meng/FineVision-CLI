@@ -98,7 +98,8 @@ download_file() {
     local output=$2
     local name=$3
     log_info "Downloading $name with multi-threaded aria2..."
-    if ! sudo aria2c -x 16 -s 16 -d "$(dirname "$output")" -o "$(basename "$output")" "$url"; then
+    sudo rm -f "$output"
+    if ! sudo aria2c -x 16 -s 16 --allow-overwrite=true -d "$(dirname "$output")" -o "$(basename "$output")" "$url"; then
         log_error "Failed to download $name from $url"
         return 1
     fi
