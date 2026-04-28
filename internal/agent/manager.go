@@ -62,7 +62,7 @@ func isPortInUse(port int) bool {
 	return false
 }
 
-func (m *AgentManager) Start(cfg AgentConfig, debug bool, stdout *os.File) error {
+func (m *AgentManager) Start(cfg AgentConfig, debug bool, stdout *os.File, heaptrack bool) error {
 	if cfg.AgentName == "" {
 		return fmt.Errorf("agent_name is required")
 	}
@@ -94,7 +94,7 @@ func (m *AgentManager) Start(cfg AgentConfig, debug bool, stdout *os.File) error
 	instance.lockFile = f
 	m.mu.Unlock()
 
-	return instance.Start(cfg, debug, stdout)
+	return instance.Start(cfg, debug, stdout, heaptrack)
 }
 
 func (m *AgentManager) Stop(name string) error {
@@ -146,7 +146,7 @@ func (m *AgentManager) GetAllStatus() map[string]struct {
 	return result
 }
 
-func (ag *AgentInstance) Start(cfg AgentConfig, debug bool, stdout *os.File) error {
+func (ag *AgentInstance) Start(cfg AgentConfig, debug bool, stdout *os.File, heaptrack bool) error {
 	ag.mu.Lock()
 	defer ag.mu.Unlock()
 
@@ -206,8 +206,7 @@ func (ag *AgentInstance) Start(cfg AgentConfig, debug bool, stdout *os.File) err
 	if debug {
 		fullCmd = "gdb -ex run --args " + fullCmd
 	}
-	utils.LogSection(os.Stdout, "[%s] Starting agent (debug=%v)", ag.Name, debug)
-	utils.LogInfo(os.Stdout, "Command: %s", fullCmd)
+	utils.LogSection(os.Stdout, "[%s] Starting agent (debug=%v) Command: %s", ag.Name, debug, fullCmd)
 
 	var cmd *exec.Cmd
 	if debug {
@@ -219,34 +218,78 @@ func (ag *AgentInstance) Start(cfg AgentConfig, debug bool, stdout *os.File) err
 
 	cmd.Env = env
 
-	if stdout != nil {
-		ag.logFile = nil
-		cmd.Stdout = stdout
-		cmd.Stderr = stdout
+	if heaptrack {
+		perfDir := filepath.Join(utils.GetFinsHome(), "performance")
+		os.MkdirAll(perfDir, 0755)
+		heaptrackOutput := filepath.Join(perfDir, fmt.Sprintf("heaptrack.%s.gz", ag.Name))
+
+		heaptrackArgs := []string{"-o", heaptrackOutput, agentBin}
+		heaptrackArgs = append(heaptrackArgs, args...)
+
+		heaptrackCmd := exec.Command("heaptrack", heaptrackArgs...)
+		heaptrackCmd.Env = env
+
+		if stdout != nil {
+			heaptrackCmd.Stdout = stdout
+			heaptrackCmd.Stderr = stdout
+		} else {
+			logPath := filepath.Join(utils.GetLogDir(), fmt.Sprintf("agent_%s.log", ag.Name))
+			f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+			if err != nil {
+				return fmt.Errorf("failed to open log file: %v", err)
+			}
+			ag.logFile = f
+			heaptrackCmd.Stdout = f
+			heaptrackCmd.Stderr = f
+		}
+
+		heaptrackCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+		if err := heaptrackCmd.Start(); err != nil {
+			if ag.logFile != nil {
+				ag.logFile.Close()
+			}
+			return fmt.Errorf("failed to start heaptrack: %v", err)
+		}
+
+		ag.cmd = heaptrackCmd
+		ag.isRunning = true
+		ag.pid = heaptrackCmd.Process.Pid
+		ag.Config = cfg
+
+		utils.LogSuccess(os.Stdout, "heaptrack started, output: %s", heaptrackOutput)
+		utils.LogSection(os.Stdout, "[%s] Agent started with PID %d under heaptrack, Press Ctrl+C to stop\n", ag.Name, ag.pid)
 	} else {
-		logPath := filepath.Join(utils.GetLogDir(), fmt.Sprintf("agent_%s.log", ag.Name))
-		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-		if err != nil {
-			return fmt.Errorf("failed to open log file: %v", err)
+		if stdout != nil {
+			cmd.Stdout = stdout
+			cmd.Stderr = stdout
+		} else {
+			logPath := filepath.Join(utils.GetLogDir(), fmt.Sprintf("agent_%s.log", ag.Name))
+			f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+			if err != nil {
+				return fmt.Errorf("failed to open log file: %v", err)
+			}
+			ag.logFile = f
+			cmd.Stdout = f
+			cmd.Stderr = f
 		}
-		ag.logFile = f
-		cmd.Stdout = f
-		cmd.Stderr = f
-	}
 
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	if err := cmd.Start(); err != nil {
-		if ag.logFile != nil {
-			ag.logFile.Close()
+		if err := cmd.Start(); err != nil {
+			if ag.logFile != nil {
+				ag.logFile.Close()
+			}
+			return err
 		}
-		return err
-	}
 
-	ag.cmd = cmd
-	ag.isRunning = true
-	ag.pid = cmd.Process.Pid
-	ag.Config = cfg
+		ag.cmd = cmd
+		ag.isRunning = true
+		ag.pid = cmd.Process.Pid
+		ag.Config = cfg
+
+		utils.LogSection(os.Stdout, "[%s] Agent started with PID %d, Press Ctrl+C to stop\n", ag.Name, ag.pid)
+	}
 
 	if ag.lockFile != nil {
 		ag.lockFile.Truncate(0)
@@ -255,7 +298,7 @@ func (ag *AgentInstance) Start(cfg AgentConfig, debug bool, stdout *os.File) err
 	}
 
 	go func() {
-		state, _ := cmd.Process.Wait()
+		state, _ := ag.cmd.Process.Wait()
 		ag.mu.Lock()
 		defer ag.mu.Unlock()
 

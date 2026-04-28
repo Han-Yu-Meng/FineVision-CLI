@@ -16,9 +16,10 @@ import (
 )
 
 var (
-	agentName string
-	agentIP   string
-	agentPort int
+	agentName      string
+	agentIP        string
+	agentPort      int
+	agentHeaptrack bool
 )
 
 var agentCmd = &cobra.Command{
@@ -31,14 +32,11 @@ var agentBuildCmd = &cobra.Command{
 	Short: "Build the fins agent binary",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		utils.LogSection(os.Stdout, "Building agent binary")
-
 		err := core.CompileAgent(context.Background(), os.Stdout)
 		if err != nil {
 			utils.LogError(os.Stdout, "Build failed: %v", err)
 			return
 		}
-		utils.LogSuccess(os.Stdout, "Agent built successfully.")
 	},
 }
 
@@ -72,7 +70,7 @@ func runAgentLocal(debug bool) {
 		LogLevel:      1,
 	}
 
-	err := agent.GlobalManager.Start(cfg, debug, os.Stdout)
+	err := agent.GlobalManager.Start(cfg, debug, os.Stdout, agentHeaptrack)
 	if err != nil {
 		utils.LogError(os.Stdout, "Failed to start agent: %v", err)
 		return
@@ -80,8 +78,6 @@ func runAgentLocal(debug bool) {
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-
-	utils.LogInfo(os.Stdout, "Agent is running. Press Ctrl+C to stop.")
 
 	<-sigChan
 
@@ -123,6 +119,7 @@ func init() {
 	agentRunCmd.Flags().StringVarP(&agentName, "name", "n", "agent", "Set agent name")
 	agentRunCmd.Flags().StringVarP(&agentIP, "ip", "I", "0.0.0.0", "Set agent IP binding")
 	agentRunCmd.Flags().IntVarP(&agentPort, "port", "P", 9090, "Set agent listening port")
+	agentRunCmd.Flags().BoolVarP(&agentHeaptrack, "heaptrack", "", false, "Enable heaptrack memory profiling")
 
 	agentDebugCmd.Flags().StringVarP(&agentName, "name", "n", "agent", "Set agent name")
 	agentDebugCmd.Flags().StringVarP(&agentIP, "ip", "I", "0.0.0.0", "Set agent IP binding")

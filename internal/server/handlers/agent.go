@@ -26,7 +26,7 @@ func StartAgent(c *gin.Context) {
 		return
 	}
 
-	if err := agent.GlobalManager.Start(req, false, nil); err != nil {
+	if err := agent.GlobalManager.Start(req, false, nil, false); err != nil {
 		c.JSON(500, gin.H{"error": "Failed to start agent: " + err.Error()})
 		return
 	}
@@ -56,7 +56,7 @@ func RunAgent(c *gin.Context) {
 	pr, pw, _ := os.Pipe()
 	defer pr.Close()
 
-	if err := agent.GlobalManager.Start(req, false, pw); err != nil {
+	if err := agent.GlobalManager.Start(req, false, pw, false); err != nil {
 		pw.Close()
 		fmt.Fprintf(c.Writer, "Error: %v\n", err)
 		flusher.Flush()
@@ -122,7 +122,7 @@ func DebugAgent(c *gin.Context) {
 	pr, pw, _ := os.Pipe()
 	defer pr.Close()
 
-	if err := agent.GlobalManager.Start(req, true, pw); err != nil {
+	if err := agent.GlobalManager.Start(req, true, pw, false); err != nil {
 		pw.Close()
 		fmt.Fprintf(c.Writer, "Error: %v\n", err)
 		flusher.Flush()
