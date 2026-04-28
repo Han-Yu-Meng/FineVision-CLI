@@ -123,6 +123,10 @@ recipes:
     build_system: "cmake"
     cmake_args:
       - "-DCMAKE_BUILD_TYPE=Release"
+      - "-DBUILD_OCTOVIS_SUBSPACE=OFF"
+      - "-DBUILD_DYNAMICEDT3D=OFF"
+      - "-DBUILD_TESTING=OFF"
+      - "-DBUILD_SHARED_LIBS=OFF"
     versions:
       "1.10.0":
         tag: "v1.10.0"
