@@ -5,7 +5,7 @@
 To install FINS CLI, run the provided installation script:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Han-Yu-Meng/fins-cli/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Han-Yu-Meng/FineVision-CLI/main/install.sh | sudo bash
 ```
 
 ### Build Internal Tools
@@ -30,5 +30,5 @@ fins --help
 To completely remove FINS CLI from your system:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Han-Yu-Meng/fins-cli/main/uninstall.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Han-Yu-Meng/FineVision-CLI/main/uninstall.sh | sudo bash
 ```
