@@ -267,10 +267,35 @@ else
 fi
 
 echo ""
-# 6. Final Tips
+# 6. Clone FineVision SDK repository
+SDK_DIR="$FINS_DIR/sdk"
+log_info "Cloning FineVision SDK to $SDK_DIR..."
+
+sudo -u "$REAL_USER" mkdir -p "$SDK_DIR"
+
+# Check if git is installed
+if ! command -v git &> /dev/null; then
+    log_info "Installing git..."
+    sudo apt-get install -y git
+fi
+
+# Clone the dev branch of FineVision repository
+FINEVISION_REPO="https://github.com/FINS-Fines/FineVision.git"
+if [ "$IS_CHINA" = "true" ]; then
+    FINEVISION_REPO="${GH_PROXY}${FINEVISION_REPO}"
+fi
+
+if sudo -u "$REAL_USER" git clone -b dev "$FINEVISION_REPO" "$SDK_DIR" 2>/dev/null; then
+    log_success "FineVision SDK cloned successfully."
+else
+    log_warn "Failed to clone FineVision SDK. You can manually run: git clone -b dev https://github.com/FINS-Fines/FineVision.git ~/.fins/sdk/"
+fi
+
+echo ""
+# 7. Final Tips
 echo ""
 echo -e "${GREEN}======================================================================${NC}"
-echo -e "${GREEN}  🎉 FINS Installation Complete!${NC}"
+echo -e "${GREEN}  FINS Installation Complete!${NC}"
 echo -e "${GREEN}======================================================================${NC}"
 echo -e "${RED}[Important Next Steps]${NC}"
 echo -e "To use Agent and Inspect features correctly, please run the following commands to compile internal tools:"

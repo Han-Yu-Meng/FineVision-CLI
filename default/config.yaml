@@ -4,7 +4,7 @@ build:
         build_jobs: 8
         build_output: ~/.fins/install
         cmake_generator: Ninja
-        sdk_path: ~/FineVision/sdk
+        sdk_path: ~/.fins/sdk/sdk
     presets:
         dev:
             description: Development mode

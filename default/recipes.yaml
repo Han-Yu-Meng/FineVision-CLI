@@ -93,7 +93,6 @@ recipes:
           tag: "2.1.0"
         
         "1.14.0":
-          # git: "https://github.com/Han-Yu-Meng/ceres-solver.git"
           tag: "1.14.0"
           cmake_args:
             - "-DSUITESPARSE=OFF"
