@@ -97,7 +97,7 @@ macro(fins_optional_ros_dependency target pkg_name)
 endmacro()
 `
 
-func CompileSDKStatic(ctx context.Context) error {
+func CompileSDKStatic(ctx context.Context, writer io.Writer) error {
 	sdkPath := utils.ExpandPath(viper.GetString("build.defaults.sdk_path"))
 	installDir := utils.ExpandPath(viper.GetString("build.defaults.build_output"))
 
@@ -171,20 +171,26 @@ install(DIRECTORY "%[2]s/fins/"
 		"-DCMAKE_BUILD_TYPE=Release",
 	}
 
+	// Use provided writer or fallback to stderr
+	var outputWriter io.Writer = os.Stderr
+	if writer != nil {
+		outputWriter = utils.NewBuildWriter(writer)
+	}
+
 	cmdConfig := exec.CommandContext(ctx, "cmake", args...)
-	if err := runCommandWithColor(ctx, cmdConfig, os.Stdout); err != nil {
+	if err := runCommandWithColor(ctx, cmdConfig, outputWriter); err != nil {
 		return fmt.Errorf("SDK CMake config failed: %v", err)
 	}
 
 	// Build SDK static library
 	cmdBuild := exec.CommandContext(ctx, "cmake", "--build", sdkBuildDir, "-j", "4")
-	if err := runCommandWithColor(ctx, cmdBuild, os.Stdout); err != nil {
+	if err := runCommandWithColor(ctx, cmdBuild, outputWriter); err != nil {
 		return fmt.Errorf("SDK build failed: %v", err)
 	}
 
 	// Install SDK
 	cmdInstall := exec.CommandContext(ctx, "cmake", "--install", sdkBuildDir)
-	if err := runCommandWithColor(ctx, cmdInstall, os.Stdout); err != nil {
+	if err := runCommandWithColor(ctx, cmdInstall, outputWriter); err != nil {
 		return fmt.Errorf("SDK install failed: %v", err)
 	}
 
@@ -281,7 +287,7 @@ func CompilePackageStream(ctx context.Context, pkgName string, rawWriter io.Writ
 	sdkStaticLib := filepath.Join(installDir, "lib", "libfins_sdk_static.a")
 	if _, err := os.Stat(sdkStaticLib); os.IsNotExist(err) {
 		utils.LogSection(rawWriter, "Building SDK static library...")
-		if err := CompileSDKStatic(ctx); err != nil {
+		if err := CompileSDKStatic(ctx, rawWriter); err != nil {
 			return fmt.Errorf("failed to build SDK static library: %v", err)
 		}
 	}
