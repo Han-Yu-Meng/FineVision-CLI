@@ -16,15 +16,11 @@ import (
 )
 
 type AgentConfig struct {
-	UrgentThreads int         `json:"urgent_threads"`
-	HighThreads   int         `json:"high_threads"`
-	MediumThreads int         `json:"medium_threads"`
-	LowThreads    int         `json:"low_threads"`
-	LogLevel      int         `json:"log_level"`
-	Plugins       []PluginReq `json:"plugins"`
-	AgentName     string      `json:"agent_name"`
-	AgentIP       string      `json:"agent_ip"`
-	AgentPort     int         `json:"agent_port"`
+	LogLevel  int         `json:"log_level"`
+	Plugins   []PluginReq `json:"plugins"`
+	AgentName string      `json:"agent_name"`
+	AgentIP   string      `json:"agent_ip"`
+	AgentPort int         `json:"agent_port"`
 }
 
 type PluginReq struct {
@@ -157,10 +153,6 @@ func (ag *AgentInstance) Start(cfg AgentConfig, debug bool, stdout *os.File, hea
 	}
 
 	args := []string{
-		"--threads-urgent", fmt.Sprintf("%d", cfg.UrgentThreads),
-		"--threads-high", fmt.Sprintf("%d", cfg.HighThreads),
-		"--threads-medium", fmt.Sprintf("%d", cfg.MediumThreads),
-		"--threads-low", fmt.Sprintf("%d", cfg.LowThreads),
 		"--log-level", fmt.Sprintf("%d", cfg.LogLevel),
 		"--name", cfg.AgentName,
 		"--ip", cfg.AgentIP,

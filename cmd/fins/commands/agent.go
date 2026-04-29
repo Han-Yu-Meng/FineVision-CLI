@@ -60,14 +60,10 @@ var agentDebugCmd = &cobra.Command{
 
 func runAgentLocal(debug bool) {
 	cfg := agent.AgentConfig{
-		AgentName:     agentName,
-		AgentIP:       agentIP,
-		AgentPort:     agentPort,
-		UrgentThreads: 2,
-		HighThreads:   2,
-		MediumThreads: 0,
-		LowThreads:    0,
-		LogLevel:      1,
+		AgentName: agentName,
+		AgentIP:   agentIP,
+		AgentPort: agentPort,
+		LogLevel:  1,
 	}
 
 	err := agent.GlobalManager.Start(cfg, debug, os.Stdout, agentHeaptrack)
