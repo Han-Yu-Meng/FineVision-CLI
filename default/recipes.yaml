@@ -113,6 +113,10 @@ recipes:
   small_gicp:
     git: "https://github.com/koide3/small_gicp.git"
     build_system: "cmake"
+    cmake_args:
+      - "-DBUILD_EXAMPLES=OFF"
+      - "-DBUILD_WITH_OPENMP=ON"
+      - "-DBUILD_SHARED_LIBS=OFF"
     versions:
       "1.0.0":
         tag: "v1.0.0"
