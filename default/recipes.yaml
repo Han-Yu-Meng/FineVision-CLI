@@ -34,6 +34,7 @@ recipes:
       - "-DYAML_CPP_BUILD_TOOLS=OFF"
       - "-DYAML_CPP_BUILD_CONTRIB=OFF"
       - "-DBUILD_SHARED_LIBS=OFF"
+      - "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
     versions:
       "0.7.0":
         tag: "yaml-cpp-0.7.0"
