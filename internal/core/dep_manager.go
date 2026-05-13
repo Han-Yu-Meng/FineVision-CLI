@@ -69,7 +69,7 @@ func handlePPA(ctx context.Context, ppa string, writer io.Writer) error {
 		return nil
 	}
 
-	utils.LogWarning(writer, "PPA %s seems NOT added. Please run 'sudo fins dep install' to add it.", ppa)
+	utils.LogWarning(writer, "PPA %s seems NOT added. Please run 'sudo fins dep solve' to add it.", ppa)
 	return nil
 }
 
@@ -239,7 +239,7 @@ func SolveDependencies(ctx context.Context, pkg *types.Package, writer io.Writer
 			if allInstalled {
 				utils.LogInfo(writer, "System package for '%s' are already installed.", lib)
 			} else {
-				utils.LogWarning(writer, "Please run 'sudo fins dep install %s' to fix missing system dependencies.", pkg.Meta.Name)
+				utils.LogWarning(writer, "Please run 'sudo fins dep solve %s' to fix missing system dependencies.", pkg.Meta.Name)
 			}
 			continue
 		}
