@@ -18,6 +18,22 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# --- 辅助函数 ---
+# 简单的版本号比较函数 (避免依赖 bc)
+version_ge () {
+    [ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" = "$2" ]
+}
+
+# 安全地以目标用户身份运行命令
+run_as_user () {
+    local cmd=$1
+    if [ "$REAL_USER" = "$(whoami)" ]; then
+        bash -c "$cmd"
+    else
+        sudo -E -u "$REAL_USER" bash -c "$cmd"
+    fi
+}
+
 # --- 1. 捕获当前环境代理变量 ---
 # 即使使用 sudo 运行，也要确保这些变量被记住
 USER_HTTP_PROXY="${http_proxy:-$HTTP_PROXY}"
@@ -51,19 +67,26 @@ else
     log_info "Location: International. Direct connection."
 fi
 
-# --- 3. 获取真实用户信息 ---
-if [ -n "$SUDO_USER" ]; then
+# --- 3. 获取真实用户信息 (增强版) ---
+if [ "$GITHUB_ACTIONS" = "true" ]; then
+    REAL_USER=$(whoami)
+    REAL_HOME="$HOME"
+elif [ -n "$SUDO_USER" ]; then
     REAL_USER="$SUDO_USER"
-else
+elif [ -n "$USER" ]; then
     REAL_USER="$USER"
+else
+    REAL_USER=$(id -un 2>/dev/null || echo "root")
 fi
-if [ "$REAL_USER" = "root" ] || [ -z "$REAL_USER" ]; then
-    REAL_USER=$(logname 2>/dev/null || echo "$SUDO_USER")
+
+# 如果还是 root 或者拿不到，强制设为 root (容器环境常见情况)
+if [ -z "$REAL_USER" ] || [ "$REAL_USER" = "root" ]; then
+    REAL_USER="root"
+    REAL_HOME="/root"
+else
+    # 尝试获取 Home 目录
+    REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6 || echo "/home/$REAL_USER")
 fi
-if [ -z "$REAL_USER" ]; then
-    REAL_USER=$(who | awk '{print $1}' | head -n 1)
-fi
-REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 
 log_info "Target user: $REAL_USER, Home: $REAL_HOME"
 
@@ -82,7 +105,7 @@ fi
 log_info "Installing system dependencies..."
 REQUIRED_PKGS=("ninja-build" "build-essential" "curl" "jq" "wget" "aria2" "git")
 UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "0.0")
-if (( $(echo "$UBUNTU_VERSION >= 22.04" | bc -l) )); then
+if version_ge "$UBUNTU_VERSION" "22.04"; then
     REQUIRED_PKGS+=("mold")
 fi
 
@@ -149,18 +172,22 @@ log_success "Binaries installed to /usr/local/bin/"
 FINS_DIR="$REAL_HOME/.fins"
 log_info "Setting up config files in $FINS_DIR..."
 
-sudo -u "$REAL_USER" mkdir -p "$FINS_DIR/logs"
+run_as_user "mkdir -p $FINS_DIR/logs"
 
 CONFIG_URL="${GH_PROXY}https://raw.githubusercontent.com/$GITHUB_USER/$GITHUB_REPO/$BRANCH/default/config.yaml"
 RECIPE_URL="${GH_PROXY}https://raw.githubusercontent.com/$GITHUB_USER/$GITHUB_REPO/$BRANCH/default/recipes.yaml"
 
 # 显式传递代理给 wget
-sudo -E -u "$REAL_USER" wget -q "$CONFIG_URL" -O "$FINS_DIR/config.yaml"
-sudo -E -u "$REAL_USER" wget -q "$RECIPE_URL" -O "$FINS_DIR/recipes.yaml"
-sudo chown -R "$REAL_USER":"$REAL_USER" "$FINS_DIR"
+run_as_user "wget -q $CONFIG_URL -O $FINS_DIR/config.yaml"
+run_as_user "wget -q $RECIPE_URL -O $FINS_DIR/recipes.yaml"
+
+# 修正权限 (如果是 root 运行但 REAL_USER 不是 root)
+if [ "$REAL_USER" != "root" ]; then
+    sudo chown -R "$REAL_USER":"$REAL_USER" "$FINS_DIR"
+fi
 
 # --- 10. Systemd 服务配置 ---
-if pidof systemd 1>/dev/null && [ -d /run/systemd/system ]; then
+if [ "$GITHUB_ACTIONS" != "true" ] && pidof systemd 1>/dev/null && [ -d /run/systemd/system ]; then
     log_info "Configuring systemd service..."
     SERVICE_FILE="/etc/systemd/system/finsd.service"
     sudo systemctl stop finsd 2>/dev/null || true
@@ -207,7 +234,7 @@ if [ -n "$USER_HTTP_PROXY" ]; then
     GIT_PROXY_ARGS="-c http.proxy=$USER_HTTP_PROXY -c https.proxy=$USER_HTTPS_PROXY"
 fi
 
-if sudo -E -u "$REAL_USER" git $GIT_PROXY_ARGS clone -b dev "$FINEVISION_REPO" "$SDK_DIR" 2>/dev/null || [ -d "$SDK_DIR" ]; then
+if run_as_user "git $GIT_PROXY_ARGS clone -b dev $FINEVISION_REPO $SDK_DIR 2>/dev/null" || [ -d "$SDK_DIR" ]; then
     log_success "FineVision SDK is ready."
 else
     log_warn "Git clone failed. Please check your connection."
