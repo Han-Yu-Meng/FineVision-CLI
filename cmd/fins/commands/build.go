@@ -14,11 +14,13 @@ import (
 	"time"
 
 	"fins-cli/cmd/fins/client"
+	"fins-cli/internal/types"
 	"fins-cli/internal/utils"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -87,19 +89,66 @@ var buildCmd = &cobra.Command{
 		}
 
 		var targetPkg string
+		var workspacePath string
 		if len(args) == 0 || args[0] == "." {
 			absPath, _ := filepath.Abs(".")
-			var workspaces []WorkspaceConfig
-			if err := viper.UnmarshalKey("local_packages", &workspaces); err == nil {
-				for _, ws := range workspaces {
-					if ws.Path == absPath {
-						buildAll = true
+
+			// 1. Try to find the package by current directory path directly from daemon
+			pkgs, err := client.FetchPackageList(DaemonURL)
+			if err == nil {
+				for _, p := range pkgs {
+					if p.Path == absPath {
+						targetPkg = p.Name
 						break
 					}
 				}
 			}
 
-			if !buildAll {
+			// 2. If not found by path, check for package.yaml
+			if targetPkg == "" {
+				if _, err := os.Stat("package.yaml"); err == nil {
+					data, err := os.ReadFile("package.yaml")
+					if err == nil {
+						var pkgMeta struct {
+							Package struct {
+								Name string `yaml:"name"`
+							} `yaml:"package"`
+							Name string `yaml:"name"`
+						}
+						if err := yaml.Unmarshal(data, &pkgMeta); err == nil {
+							if pkgMeta.Package.Name != "" {
+								targetPkg = pkgMeta.Package.Name
+							} else if pkgMeta.Name != "" {
+								targetPkg = pkgMeta.Name
+							}
+						}
+					}
+				}
+			}
+
+			// 3. Check for workspace.yaml
+			if targetPkg == "" {
+				if _, err := os.Stat("workspace.yaml"); err == nil {
+					buildAll = true
+					workspacePath = absPath
+				}
+			}
+
+			// 4. Existing logic for registered workspaces
+			if targetPkg == "" && !buildAll {
+				var workspaces []WorkspaceConfig
+				if err := viper.UnmarshalKey("local_packages", &workspaces); err == nil {
+					for _, ws := range workspaces {
+						if ws.Path == absPath {
+							buildAll = true
+							workspacePath = absPath
+							break
+						}
+					}
+				}
+			}
+
+			if !buildAll && targetPkg == "" {
 				if len(args) == 0 {
 					utils.LogError(os.Stdout, "Package name required or run in a registered workspace.")
 					return
@@ -114,6 +163,22 @@ var buildCmd = &cobra.Command{
 			pkgs, err := client.FetchPackageList(DaemonURL)
 			if err != nil {
 				utils.LogError(os.Stdout, "Failed to connect to daemon: %v", err)
+				return
+			}
+
+			if workspacePath != "" {
+				var filtered []types.PackageInfo
+				for _, p := range pkgs {
+					rel, err := filepath.Rel(workspacePath, p.Path)
+					if err == nil && !strings.HasPrefix(rel, "..") {
+						filtered = append(filtered, p)
+					}
+				}
+				pkgs = filtered
+			}
+
+			if len(pkgs) == 0 {
+				utils.LogWarning(os.Stdout, "No packages found to build.")
 				return
 			}
 
