@@ -209,7 +209,7 @@ var workspacePullCmd = &cobra.Command{
 			repoPath := filepath.Join(absPath, repo.Name)
 			if _, err := os.Stat(repoPath); os.IsNotExist(err) {
 				utils.LogSection(os.Stdout, "Cloning %s (%s)...", repo.Name, repo.URL)
-				cloneCmd := exec.Command("git", "clone", "-b", repo.Branch, repo.URL, repo.Name)
+				cloneCmd := exec.Command("git", "clone", "--recursive", "-b", repo.Branch, repo.URL, repo.Name)
 				cloneCmd.Stdout = os.Stdout
 				cloneCmd.Stderr = os.Stderr
 				if err := cloneCmd.Run(); err != nil {
@@ -218,13 +218,22 @@ var workspacePullCmd = &cobra.Command{
 				}
 			} else {
 				utils.LogSection(os.Stdout, "Pulling %s...", repo.Name)
-				pullCmd := exec.Command("git", "pull")
+				pullCmd := exec.Command("git", "pull", "--recurse-submodules")
 				pullCmd.Dir = repoPath
 				pullCmd.Stdout = os.Stdout
 				pullCmd.Stderr = os.Stderr
 				if err := pullCmd.Run(); err != nil {
 					utils.LogError(os.Stdout, "Failed to pull %s: %v", repo.Name, err)
 					continue
+				}
+
+				// Also update submodules after pull
+				submoduleCmd := exec.Command("git", "submodule", "update", "--init", "--recursive")
+				submoduleCmd.Dir = repoPath
+				submoduleCmd.Stdout = os.Stdout
+				submoduleCmd.Stderr = os.Stderr
+				if err := submoduleCmd.Run(); err != nil {
+					utils.LogWarning(os.Stdout, "Failed to update submodules for %s: %v", repo.Name, err)
 				}
 			}
 		}
