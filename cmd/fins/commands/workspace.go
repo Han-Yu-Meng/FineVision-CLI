@@ -170,6 +170,33 @@ var workspacePullCmd = &cobra.Command{
 		}
 
 		absPath, _ := filepath.Abs(".")
+
+		// Update .gitignore with repo names
+		gitignorePath := filepath.Join(absPath, ".gitignore")
+		existingContent, _ := os.ReadFile(gitignorePath)
+		contentStr := string(existingContent)
+
+		f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			utils.LogError(os.Stdout, "Failed to open/create .gitignore: %v", err)
+		} else {
+			updated := false
+			for _, repo := range config.Repos {
+				if !strings.Contains(contentStr, repo.Name) {
+					if !updated && len(contentStr) > 0 && contentStr[len(contentStr)-1] != '\n' {
+						f.WriteString("\n")
+					}
+					f.WriteString(repo.Name + "\n")
+					contentStr += repo.Name + "\n"
+					updated = true
+				}
+			}
+			f.Close()
+			if updated {
+				utils.LogSuccess(os.Stdout, ".gitignore updated.")
+			}
+		}
+
 		var workspaces []WorkspaceConfig
 		if err := viper.UnmarshalKey("local_packages", &workspaces); err != nil {
 			utils.LogError(os.Stdout, "Failed to parse workspaces: %v", err)
@@ -235,24 +262,6 @@ var workspacePullCmd = &cobra.Command{
 				if err := submoduleCmd.Run(); err != nil {
 					utils.LogWarning(os.Stdout, "Failed to update submodules for %s: %v", repo.Name, err)
 				}
-			}
-		}
-
-		// Generate .gitignore
-		gitignorePath := filepath.Join(absPath, ".gitignore")
-		ignoreEntry := "/*/.git"
-		
-		existingContent, _ := os.ReadFile(gitignorePath)
-		if !strings.Contains(string(existingContent), ignoreEntry) {
-			f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if err != nil {
-				utils.LogError(os.Stdout, "Failed to open/create .gitignore: %v", err)
-			} else {
-				defer f.Close()
-				if len(existingContent) > 0 && existingContent[len(existingContent)-1] != '\n' {
-					f.WriteString("\n")
-				}
-				utils.LogSuccess(os.Stdout, ".gitignore updated.")
 			}
 		}
 
