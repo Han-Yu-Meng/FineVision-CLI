@@ -159,6 +159,7 @@ func (ag *AgentInstance) Start(cfg AgentConfig, debug bool, stdout *os.File, hea
 		"--port", fmt.Sprintf("%d", cfg.AgentPort),
 		"--load-all",
 		"--terminal-log", "false",
+		"--perf",
 	}
 
 	webUrl := viper.GetString("webui.host")
