@@ -277,3 +277,11 @@ recipes:
   zmq:
     type: "system"
     system_pkg: "libzmq3-dev"
+
+  xtensor:
+    type: "system"
+    system_pkg: "libxtensor-dev"
+
+  angle:
+    type: "system"
+    system_pkg: "ros-${ROS_DISTRO}-angles"
