@@ -31,6 +31,8 @@ type Node struct {
 	Description string      `json:"description"`
 	Inputs      []Port      `json:"inputs"`
 	Outputs     []Port      `json:"outputs"`
+	Servers     []Service   `json:"servers"`
+	Clients     []Service   `json:"clients"`
 	Parameters  []Parameter `json:"parameters"`
 	PackageName string      `json:"package_name"`
 }
@@ -38,6 +40,12 @@ type Node struct {
 type Port struct {
 	Name string `json:"name"`
 	Type string `json:"type"`
+}
+
+type Service struct {
+	Name         string `json:"name"`
+	RequestType  string `json:"request_type"`
+	ResponseType string `json:"response_type"`
 }
 
 type Parameter struct {
@@ -124,6 +132,22 @@ func generateSnippet(n Node) string {
 		sb.WriteString("    outputs={\n")
 		for _, out := range n.Outputs {
 			sb.WriteString(fmt.Sprintf("        \"%s\": \"\",\n", out.Name))
+		}
+		sb.WriteString("    },\n")
+	}
+
+	if len(n.Servers) > 0 {
+		sb.WriteString("    servers={\n")
+		for _, s := range n.Servers {
+			sb.WriteString(fmt.Sprintf("        \"%s\": \"\",\n", s.Name))
+		}
+		sb.WriteString("    },\n")
+	}
+
+	if len(n.Clients) > 0 {
+		sb.WriteString("    clients={\n")
+		for _, c := range n.Clients {
+			sb.WriteString(fmt.Sprintf("        \"%s\": \"\",\n", c.Name))
 		}
 		sb.WriteString("    },\n")
 	}
@@ -283,6 +307,36 @@ func (m model) View() string {
 		rightPane.WriteString(fmt.Sprintf("\n  %s\n", labelStyle.Render("Outputs:")))
 		for _, out := range selectedNode.Outputs {
 			rightPane.WriteString(fmt.Sprintf("    %s %s\n", portNameStyle.Render(out.Name), typeStyle.Render(out.Type)))
+		}
+	}
+
+	if len(selectedNode.Servers) > 0 {
+		rightPane.WriteString(fmt.Sprintf("\n  %s\n", labelStyle.Render("Servers:")))
+		for _, s := range selectedNode.Servers {
+			reqType := s.RequestType
+			if reqType == "" {
+				reqType = "void"
+			}
+			respType := s.ResponseType
+			if respType == "" {
+				respType = "void"
+			}
+			rightPane.WriteString(fmt.Sprintf("    %s %s -> %s\n", portNameStyle.Render(s.Name), typeStyle.Render(reqType), typeStyle.Render(respType)))
+		}
+	}
+
+	if len(selectedNode.Clients) > 0 {
+		rightPane.WriteString(fmt.Sprintf("\n  %s\n", labelStyle.Render("Clients:")))
+		for _, c := range selectedNode.Clients {
+			reqType := c.RequestType
+			if reqType == "" {
+				reqType = "void"
+			}
+			respType := c.ResponseType
+			if respType == "" {
+				respType = "void"
+			}
+			rightPane.WriteString(fmt.Sprintf("    %s %s -> %s\n", portNameStyle.Render(c.Name), typeStyle.Render(reqType), typeStyle.Render(respType)))
 		}
 	}
 
