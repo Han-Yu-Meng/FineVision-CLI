@@ -511,11 +511,7 @@ endif()
 func CleanAllBuilds() error {
 	pkgs, _ := ScanPackages()
 	for _, pkg := range pkgs {
-		buildPath := filepath.Join(pkg.Path, "build")
-		if _, err := os.Stat(buildPath); err == nil {
-			utils.LogSection(os.Stdout, "Cleaning %s", buildPath)
-			os.RemoveAll(buildPath)
-		}
+		cleanPackageBuildDir(pkg)
 	}
 
 	// Clean isolated core build directory
@@ -525,6 +521,35 @@ func CleanAllBuilds() error {
 		os.RemoveAll(coreBuildRoot)
 	}
 
+	return nil
+}
+
+func cleanPackageBuildDir(pkg *types.Package) {
+	buildPath := filepath.Join(pkg.Path, "build")
+	if _, err := os.Stat(buildPath); err == nil {
+		utils.LogSection(os.Stdout, "Cleaning %s", buildPath)
+		os.RemoveAll(buildPath)
+	}
+}
+
+func CleanPackageBuild(pkgName string) error {
+	pkgs, _ := ScanPackages()
+	if pkg, exists := pkgs[pkgName]; exists {
+		cleanPackageBuildDir(pkg)
+	} else {
+		return fmt.Errorf("package %s not found", pkgName)
+	}
+	return nil
+}
+
+func CleanWorkspaceBuilds(workspacePath string) error {
+	pkgs, _ := ScanPackages()
+	for _, pkg := range pkgs {
+		rel, err := filepath.Rel(workspacePath, pkg.Path)
+		if err == nil && !strings.HasPrefix(rel, "..") {
+			cleanPackageBuildDir(pkg)
+		}
+	}
 	return nil
 }
 

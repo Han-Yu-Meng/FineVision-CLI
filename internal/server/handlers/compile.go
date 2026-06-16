@@ -48,10 +48,33 @@ func CompilePackage(c *gin.Context) {
 }
 
 func CleanBuilds(c *gin.Context) {
-	if err := core.CleanAllBuilds(); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-	} else {
-		c.JSON(200, gin.H{"message": "Build cache cleaned"})
+	var body struct {
+		Target    string `json:"target"`    // package name
+		Workspace string `json:"workspace"` // workspace path
+	}
+
+	// Try to parse body; ignore error if empty (clean all)
+	c.ShouldBindJSON(&body)
+
+	switch {
+	case body.Target != "":
+		if err := core.CleanPackageBuild(body.Target); err != nil {
+			c.JSON(404, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(200, gin.H{"message": fmt.Sprintf("Build cache cleaned for %s", body.Target)})
+		}
+	case body.Workspace != "":
+		if err := core.CleanWorkspaceBuilds(body.Workspace); err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(200, gin.H{"message": fmt.Sprintf("Build cache cleaned for workspace: %s", body.Workspace)})
+		}
+	default:
+		if err := core.CleanAllBuilds(); err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(200, gin.H{"message": "Build cache cleaned"})
+		}
 	}
 }
 

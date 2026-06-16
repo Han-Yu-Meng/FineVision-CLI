@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -49,9 +51,6 @@ var buildCmd = &cobra.Command{
 		return suggestions, cobra.ShellCompDirectiveNoFileComp
 	},
 	Args: func(cmd *cobra.Command, args []string) error {
-		if buildClear {
-			return nil
-		}
 		if buildAll {
 			if len(args) > 0 {
 				return fmt.Errorf("cannot use arguments with --all")
@@ -67,27 +66,7 @@ var buildCmd = &cobra.Command{
 		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		if buildClear {
-			url := fmt.Sprintf("%s/api/clean", DaemonURL)
-			resp, err := http.Post(url, "application/json", nil)
-			if err != nil {
-				utils.LogError(os.Stdout, "Failed to connect to finsd: %v", err)
-				return
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode == 200 {
-				utils.LogSuccess(os.Stdout, "All build caches cleared successfully")
-			} else {
-				body, _ := io.ReadAll(resp.Body)
-				utils.LogError(os.Stdout, "Failed to clean cache: %s", string(body))
-			}
-
-			if !buildAll && len(args) == 0 {
-				return
-			}
-		}
-
+		// --- Phase 1: Resolve scope ---
 		var targetPkg string
 		var workspacePath string
 		if len(args) == 0 || args[0] == "." {
@@ -159,6 +138,45 @@ var buildCmd = &cobra.Command{
 			targetPkg = args[0]
 		}
 
+		// --- Phase 2: Handle --clear based on resolved scope ---
+		if buildClear {
+			var cleanBody map[string]string
+			if buildAll && workspacePath != "" {
+				cleanBody = map[string]string{"workspace": workspacePath}
+			} else if targetPkg != "" {
+				cleanBody = map[string]string{"target": targetPkg}
+			}
+
+			var reqBody io.Reader
+			if cleanBody != nil {
+				data, _ := json.Marshal(cleanBody)
+				reqBody = bytes.NewBuffer(data)
+			}
+
+			url := fmt.Sprintf("%s/api/clean", DaemonURL)
+			resp, err := http.Post(url, "application/json", reqBody)
+			if err != nil {
+				utils.LogError(os.Stdout, "Failed to connect to finsd: %v", err)
+				return
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode == 200 {
+				var msg struct{ Message string `json:"message"` }
+				json.NewDecoder(resp.Body).Decode(&msg)
+				utils.LogSuccess(os.Stdout, "%s", msg.Message)
+			} else {
+				respBody, _ := io.ReadAll(resp.Body)
+				utils.LogError(os.Stdout, "Failed to clean cache: %s", string(respBody))
+				return
+			}
+
+			if !buildAll && targetPkg == "" {
+				return
+			}
+		}
+
+		// --- Phase 3: Execute build ---
 		if buildAll {
 			pkgs, err := client.FetchPackageList(DaemonURL)
 			if err != nil {
@@ -330,7 +348,7 @@ var buildCmd = &cobra.Command{
 
 func init() {
 	buildCmd.Flags().BoolVar(&buildAll, "all", false, "Build all packages in parallel")
-	buildCmd.Flags().BoolVar(&buildClear, "clear", false, "Clear all build caches before building")
+	buildCmd.Flags().BoolVar(&buildClear, "clear", false, "Clear build caches before building (respects build scope)")
 	buildCmd.Flags().StringVar(&targetSource, "source", "", "Specify package source to resolve ambiguity")
 	RootCmd.AddCommand(buildCmd)
 }
