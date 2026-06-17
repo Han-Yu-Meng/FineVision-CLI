@@ -619,7 +619,7 @@ endif()
 		fmt.Sprintf("-DCMAKE_BUILD_TYPE=%s", buildType),
 	}
 
-	linkerFlags := "-rdynamic"
+	linkerFlags := ""
 	if _, err := exec.LookPath("mold"); err == nil {
 		useFuseLd := false
 		if out, err := exec.Command("gcc", "-dumpversion").Output(); err == nil {
