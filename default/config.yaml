@@ -1,31 +1,27 @@
 build:
-    default_preset: release
+    default_preset: profile
     defaults:
         build_jobs: 8
         build_output: ~/.fins/install
         cmake_generator: Ninja
         sdk_path: ~/.fins/sdk/sdk
     presets:
-        dev:
-            description: Development mode
-            build_type: Debug
-            cmake_args:
-                - -DBUILD_TESTS=ON
-            sanitize: none
         release:
             description: Release mode
             build_type: Release
             sanitize: none
         profile:
+            description: Profiling mode for perf
             build_type: RelWithDebInfo
             cmake_args:
                 - -DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O2 -g -fno-omit-frame-pointer
                 - -DCMAKE_C_FLAGS_RELWITHDEBINFO=-O2 -g -fno-omit-frame-pointer
-            description: Profiling mode for perf
             sanitize: none
-        simulate:
-            description: Simulation mode
-            build_type: RelWithDebInfo
+        debug:
+            description: Development mode
+            build_type: Debug
+            cmake_args:
+                - -DBUILD_TESTS=ON
             sanitize: none
 local_packages: []
 webui:
