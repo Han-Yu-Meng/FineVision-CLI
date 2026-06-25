@@ -1,9 +1,11 @@
 package commands
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
-	"regexp"
 	"sort"
 
 	"fins-cli/internal/utils"
@@ -65,44 +67,50 @@ var configPresetSetCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		name := args[0]
-		presets := viper.GetStringMap("build.presets")
 
-		if _, ok := presets[name]; !ok {
-			utils.LogError(os.Stdout, "Preset '%s' does not exist.", name)
-			return
-		}
-
-		viper.Set("build.default_preset", name)
-
-		configFile := viper.ConfigFileUsed()
-		if configFile == "" {
-			utils.LogError(os.Stdout, "No configuration file found.")
-			return
-		}
-
-		content, err := os.ReadFile(configFile)
+		// 🌟 1. 向 Daemon 请求可用预设列表进行校验
+		respList, err := http.Get(fmt.Sprintf("%s/api/presets", DaemonURL))
 		if err != nil {
-			utils.LogError(os.Stdout, "Failed to read config file: %v", err)
+			utils.LogError(os.Stdout, "Failed to connect to daemon: %v", err)
+			return
+		}
+		defer respList.Body.Close()
+
+		var presetData struct {
+			Presets []string `json:"presets"`
+		}
+		if err := json.NewDecoder(respList.Body).Decode(&presetData); err != nil {
+			utils.LogError(os.Stdout, "Failed to parse presets from daemon: %v", err)
 			return
 		}
 
-		re := regexp.MustCompile(`(?m)^(  default_preset:\s*)(["']?)([^"'\n]+)(["']?)`)
-
-		newContent := re.ReplaceAllString(string(content), fmt.Sprintf("${1}\"%s\"", name))
-
-		if string(newContent) == string(content) {
-			utils.LogWarning(os.Stdout, "Could not update config via regex, using Viper write instead.")
-			if err := viper.WriteConfig(); err != nil {
-				utils.LogError(os.Stdout, "Failed to save config: %v", err)
-			}
-		} else {
-			if err := os.WriteFile(configFile, []byte(newContent), 0644); err != nil {
-				utils.LogError(os.Stdout, "Failed to write config file: %v", err)
-				return
+		found := false
+		for _, p := range presetData.Presets {
+			if p == name {
+				found = true
+				break
 			}
 		}
+		if !found {
+			utils.LogError(os.Stdout, "Preset '%s' does not exist. Available: %v", name, presetData.Presets)
+			return
+		}
 
-		utils.LogSuccess(os.Stdout, "Default preset updated to '%s'", name)
+		// 🌟 2. 发送 POST 请求直接命令 Daemon 修改预设，确保内存与磁盘配置文件同步更新
+		payload, _ := json.Marshal(map[string]string{"name": name})
+		url := fmt.Sprintf("%s/api/preset", DaemonURL)
+		resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
+		if err != nil {
+			utils.LogError(os.Stdout, "Failed to update preset on daemon: %v", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == 200 {
+			utils.LogSuccess(os.Stdout, "Default preset successfully updated to '%s' on daemon.", name)
+		} else {
+			utils.LogError(os.Stdout, "Daemon failed to update preset (status %d)", resp.StatusCode)
+		}
 	},
 }
 
