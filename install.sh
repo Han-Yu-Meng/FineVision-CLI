@@ -260,16 +260,20 @@ else
     log_warn "FineVision-Launch clone failed. Please check your connection."
 fi
 
-# --- 13. 完成提示 ---
+# --- 13. 自动编译 (非 CI 环境) ---
+if [ "$GITHUB_ACTIONS" != "true" ]; then
+    log_info "Building all components (SDK static, agent, inspect)..."
+    if run_as_user "fins update --rebuild 2>&1"; then
+        log_success "All components built successfully."
+    else
+        log_warn "Build failed. You can manually run 'fins update --rebuild' later."
+    fi
+fi
+
+# --- 14. 完成提示 ---
 echo ""
 echo -e "${GREEN}======================================================================${NC}"
 echo -e "${GREEN}  FineVision-CLI Installation Complete!${NC}"
 echo -e "${GREEN}======================================================================${NC}"
-echo -e "${RED}[Important Next Steps]${NC}"
-echo ""
-echo -e "To use Agent and Inspect features, please run:"
-echo -e "  ${YELLOW}fins agent build${NC}"
-echo -e "  ${YELLOW}fins inspect build${NC}"
-echo ""
 echo -e "Help: ${YELLOW}fins --help${NC}"
 echo ""
