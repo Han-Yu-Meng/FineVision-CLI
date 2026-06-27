@@ -21,14 +21,14 @@ type WorkspaceConfig struct {
 }
 
 type RepoConfig struct {
-	Name   string `yaml:"name"`
-	URL    string `yaml:"url"`
-	Branch string `yaml:"branch"`
+	URL     string `yaml:"url"`
+	Version string `yaml:"version"`
+	Type    string `yaml:"type"`
 }
 
 type WorkspacePullConfig struct {
-	Name  string       `yaml:"name"`
-	Repos []RepoConfig `yaml:"repos"`
+	Name  string                `yaml:"name"`
+	Repos map[string]RepoConfig `yaml:"repos"`
 }
 
 var workspaceCmd = &cobra.Command{
@@ -171,7 +171,7 @@ var workspacePullCmd = &cobra.Command{
 
 		absPath, _ := filepath.Abs(".")
 
-		// Update .gitignore with repo names
+		// Update .gitignore with repo paths
 		gitignorePath := filepath.Join(absPath, ".gitignore")
 		existingContent, _ := os.ReadFile(gitignorePath)
 		contentStr := string(existingContent)
@@ -181,13 +181,13 @@ var workspacePullCmd = &cobra.Command{
 			utils.LogError(os.Stdout, "Failed to open/create .gitignore: %v", err)
 		} else {
 			updated := false
-			for _, repo := range config.Repos {
-				if !strings.Contains(contentStr, repo.Name) {
+			for repoPath := range config.Repos {
+				if !strings.Contains(contentStr, repoPath) {
 					if !updated && len(contentStr) > 0 && contentStr[len(contentStr)-1] != '\n' {
 						f.WriteString("\n")
 					}
-					f.WriteString(repo.Name + "\n")
-					contentStr += repo.Name + "\n"
+					f.WriteString(repoPath + "\n")
+					contentStr += repoPath + "\n"
 					updated = true
 				}
 			}
@@ -213,14 +213,18 @@ var workspacePullCmd = &cobra.Command{
 		}
 
 		if !found {
-			// Check if name already exists for another path
-			for _, ws := range workspaces {
+			// If name already exists at a different path, update its path
+			updated := false
+			for i, ws := range workspaces {
 				if ws.Name == config.Name {
-					utils.LogError(os.Stdout, "Workspace with name '%s' already exists (Path: %s)", config.Name, ws.Path)
-					return
+					workspaces[i].Path = absPath
+					updated = true
+					break
 				}
 			}
-			workspaces = append(workspaces, WorkspaceConfig{Name: config.Name, Path: absPath})
+			if !updated {
+				workspaces = append(workspaces, WorkspaceConfig{Name: config.Name, Path: absPath})
+			}
 		}
 
 		viper.Set("local_packages", workspaces)
@@ -232,35 +236,70 @@ var workspacePullCmd = &cobra.Command{
 		utils.LogSuccess(os.Stdout, "Workspace '%s' registered/updated at %s", config.Name, absPath)
 
 		// Clone/Pull repos
-		for _, repo := range config.Repos {
-			repoPath := filepath.Join(absPath, repo.Name)
-			if _, err := os.Stat(repoPath); os.IsNotExist(err) {
-				utils.LogSection(os.Stdout, "Cloning %s (%s)...", repo.Name, repo.URL)
-				cloneCmd := exec.Command("git", "clone", "--recursive", "-b", repo.Branch, repo.URL, repo.Name)
+		for repoPath, repo := range config.Repos {
+			fullPath := filepath.Join(absPath, repoPath)
+			if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+				utils.LogSection(os.Stdout, "Cloning %s (%s)...", repoPath, repo.URL)
+				// Ensure parent directories exist for nested paths
+				parentDir := filepath.Dir(fullPath)
+				if err := os.MkdirAll(parentDir, 0755); err != nil {
+					utils.LogError(os.Stdout, "Failed to create directory for %s: %v", repoPath, err)
+					continue
+				}
+				cloneCmd := exec.Command("git", "clone", "--recursive", repo.URL, fullPath)
 				cloneCmd.Stdout = os.Stdout
 				cloneCmd.Stderr = os.Stderr
 				if err := cloneCmd.Run(); err != nil {
-					utils.LogError(os.Stdout, "Failed to clone %s: %v", repo.Name, err)
+					utils.LogError(os.Stdout, "Failed to clone %s: %v", repoPath, err)
 					continue
+				}
+				// Checkout specific version (works for branch, tag, and commit hash)
+				if repo.Version != "" {
+					checkoutCmd := exec.Command("git", "checkout", repo.Version)
+					checkoutCmd.Dir = fullPath
+					checkoutCmd.Stdout = os.Stdout
+					checkoutCmd.Stderr = os.Stderr
+					if err := checkoutCmd.Run(); err != nil {
+						utils.LogError(os.Stdout, "Failed to checkout version '%s' for %s: %v", repo.Version, repoPath, err)
+						continue
+					}
 				}
 			} else {
-				utils.LogSection(os.Stdout, "Pulling %s...", repo.Name)
-				pullCmd := exec.Command("git", "pull", "--recurse-submodules")
-				pullCmd.Dir = repoPath
-				pullCmd.Stdout = os.Stdout
-				pullCmd.Stderr = os.Stderr
-				if err := pullCmd.Run(); err != nil {
-					utils.LogError(os.Stdout, "Failed to pull %s: %v", repo.Name, err)
+				utils.LogSection(os.Stdout, "Updating %s...", repoPath)
+				// Fetch latest refs and tags
+				fetchCmd := exec.Command("git", "fetch", "--all", "--tags")
+				fetchCmd.Dir = fullPath
+				fetchCmd.Stdout = os.Stdout
+				fetchCmd.Stderr = os.Stderr
+				if err := fetchCmd.Run(); err != nil {
+					utils.LogError(os.Stdout, "Failed to fetch %s: %v", repoPath, err)
 					continue
 				}
+				// Checkout specific version
+				if repo.Version != "" {
+					checkoutCmd := exec.Command("git", "checkout", repo.Version)
+					checkoutCmd.Dir = fullPath
+					checkoutCmd.Stdout = os.Stdout
+					checkoutCmd.Stderr = os.Stderr
+					if err := checkoutCmd.Run(); err != nil {
+						utils.LogError(os.Stdout, "Failed to checkout version '%s' for %s: %v", repo.Version, repoPath, err)
+						continue
+					}
+				}
+				// Try to pull (will fail gracefully for tags/commits)
+				pullCmd := exec.Command("git", "pull", "--ff-only")
+				pullCmd.Dir = fullPath
+				pullCmd.Stdout = os.Stdout
+				pullCmd.Stderr = os.Stderr
+				pullCmd.Run()
 
-				// Also update submodules after pull
+				// Update submodules
 				submoduleCmd := exec.Command("git", "submodule", "update", "--init", "--recursive")
-				submoduleCmd.Dir = repoPath
+				submoduleCmd.Dir = fullPath
 				submoduleCmd.Stdout = os.Stdout
 				submoduleCmd.Stderr = os.Stderr
 				if err := submoduleCmd.Run(); err != nil {
-					utils.LogWarning(os.Stdout, "Failed to update submodules for %s: %v", repo.Name, err)
+					utils.LogWarning(os.Stdout, "Failed to update submodules for %s: %v", repoPath, err)
 				}
 			}
 		}

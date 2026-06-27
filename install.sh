@@ -103,7 +103,7 @@ fi
 
 # --- 5. 安装依赖 ---
 log_info "Installing system dependencies..."
-REQUIRED_PKGS=("ninja-build" "build-essential" "curl" "jq" "wget" "aria2" "git")
+REQUIRED_PKGS=("ninja-build" "build-essential" "curl" "jq" "wget" "aria2" "git" "python3-pip")
 UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "0.0")
 if version_ge "$UBUNTU_VERSION" "22.04"; then
     REQUIRED_PKGS+=("mold")
@@ -240,7 +240,27 @@ else
     log_warn "Git clone failed. Please check your connection."
 fi
 
-# --- 12. 完成提示 ---
+# --- 12. 安装 FineVision-Launch ---
+LAUNCH_DIR="$FINS_DIR/launch"
+log_info "Cloning FineVision-Launch to $LAUNCH_DIR..."
+LAUNCH_REPO="https://github.com/Han-Yu-Meng/FineVision-Launch.git"
+[ "$IS_CHINA" = "true" ] && LAUNCH_REPO="${GH_PROXY}${LAUNCH_REPO}"
+
+if run_as_user "git $GIT_PROXY_ARGS clone $LAUNCH_REPO $LAUNCH_DIR 2>/dev/null" || [ -d "$LAUNCH_DIR" ]; then
+    log_success "FineVision-Launch cloned successfully."
+
+    # 安装 pip 依赖
+    log_info "Installing FineVision-Launch with pip --user..."
+    if run_as_user "cd $LAUNCH_DIR && pip install --user . 2>/dev/null"; then
+        log_success "FineVision-Launch installed successfully."
+    else
+        log_warn "pip install failed. Please check Python/pip installation."
+    fi
+else
+    log_warn "FineVision-Launch clone failed. Please check your connection."
+fi
+
+# --- 13. 完成提示 ---
 echo ""
 echo -e "${GREEN}======================================================================${NC}"
 echo -e "${GREEN}  FineVision-CLI Installation Complete!${NC}"
