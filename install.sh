@@ -30,7 +30,7 @@ run_as_user () {
     if [ "$REAL_USER" = "$(whoami)" ]; then
         bash -c "$cmd"
     else
-        sudo -E -u "$REAL_USER" bash -c "$cmd"
+        sudo -H -u "$REAL_USER" bash -c "$cmd"
     fi
 }
 
@@ -249,9 +249,14 @@ LAUNCH_REPO="https://github.com/Han-Yu-Meng/FineVision-Launch.git"
 if run_as_user "git $GIT_PROXY_ARGS clone $LAUNCH_REPO $LAUNCH_DIR 2>/dev/null" || [ -d "$LAUNCH_DIR" ]; then
     log_success "FineVision-Launch cloned successfully."
 
-    # 安装 pip 依赖 (使用 --break-system-packages 兼容 Ubuntu 24.04+)
+    # 安装 pip 依赖
     log_info "Installing FineVision-Launch with pip --user..."
-    if run_as_user "cd $LAUNCH_DIR && pip install --user --break-system-packages . 2>/dev/null"; then
+    # 检查是否需要 --break-system-packages (Ubuntu 23.04+ 的 PEP 668 限制)
+    PIP_EXTRA_ARGS=""
+    if version_ge "$UBUNTU_VERSION" "23.04"; then
+        PIP_EXTRA_ARGS="--break-system-packages"
+    fi
+    if run_as_user "cd $LAUNCH_DIR && pip install --user $PIP_EXTRA_ARGS ."; then
         log_success "FineVision-Launch installed successfully."
     else
         log_warn "pip install failed. Please check Python/pip installation."
@@ -263,7 +268,12 @@ fi
 # --- 13. 自动编译 (非 CI 环境) ---
 if [ "$GITHUB_ACTIONS" != "true" ]; then
     log_info "Building all components (SDK static, agent, inspect)..."
-    if run_as_user "fins update --rebuild 2>&1"; then
+    if [ "$REAL_USER" = "root" ]; then
+        fins update --rebuild 2>&1
+    else
+        sudo -u "$REAL_USER" -i bash -c 'fins update --rebuild 2>&1'
+    fi
+    if [ $? -eq 0 ]; then
         log_success "All components built successfully."
     else
         log_warn "Build failed. You can manually run 'fins update --rebuild' later."
