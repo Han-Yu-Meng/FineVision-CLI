@@ -249,9 +249,9 @@ LAUNCH_REPO="https://github.com/Han-Yu-Meng/FineVision-Launch.git"
 if run_as_user "git $GIT_PROXY_ARGS clone $LAUNCH_REPO $LAUNCH_DIR 2>/dev/null" || [ -d "$LAUNCH_DIR" ]; then
     log_success "FineVision-Launch cloned successfully."
 
-    # 安装 pip 依赖
+    # 安装 pip 依赖 (使用 --break-system-packages 兼容 Ubuntu 24.04+)
     log_info "Installing FineVision-Launch with pip --user..."
-    if run_as_user "cd $LAUNCH_DIR && pip install --user . 2>/dev/null"; then
+    if run_as_user "cd $LAUNCH_DIR && pip install --user --break-system-packages . 2>/dev/null"; then
         log_success "FineVision-Launch installed successfully."
     else
         log_warn "pip install failed. Please check Python/pip installation."
