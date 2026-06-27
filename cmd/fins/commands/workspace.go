@@ -23,7 +23,7 @@ type WorkspaceConfig struct {
 type RepoConfig struct {
 	URL     string `yaml:"url"`
 	Version string `yaml:"version"`
-	Type    string `yaml:"type"`
+	Type    string `yaml:"type,omitempty"`
 }
 
 type WorkspacePullConfig struct {
@@ -338,7 +338,133 @@ var workspaceScanCmd = &cobra.Command{
 	},
 }
 
+var captureUseHash bool
+
+var workspaceCaptureCmd = &cobra.Command{
+	Use:   "capture",
+	Short: "Capture current workspace state into workspace.yaml",
+	Long:  "Scan all git repos with valid fins package config and sync them to workspace.yaml",
+	Run: func(cmd *cobra.Command, args []string) {
+		absPath, _ := filepath.Abs(".")
+
+		// Try to read existing workspace name from workspace.yaml
+		workspaceName := filepath.Base(absPath)
+		yamlPath := "workspace.yaml"
+		if data, err := os.ReadFile(yamlPath); err == nil {
+			var existing WorkspacePullConfig
+			if yaml.Unmarshal(data, &existing) == nil && existing.Name != "" {
+				workspaceName = existing.Name
+			}
+		}
+
+		repos := make(map[string]RepoConfig)
+
+		// Walk workspace to find package.yaml (same logic as scanner.go)
+		filepath.WalkDir(absPath, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+
+			// Skip hidden directories
+			if d.IsDir() && strings.HasPrefix(d.Name(), ".") && d.Name() != "." {
+				return filepath.SkipDir
+			}
+
+			// Skip build output directories
+			if d.IsDir() && (d.Name() == "build" || d.Name() == "devel" || d.Name() == "install") {
+				return filepath.SkipDir
+			}
+
+			// Found package.yaml - this is a fins package
+			if !d.IsDir() && d.Name() == "package.yaml" {
+				repoDir := filepath.Dir(path)
+
+				// Check if it's a git repo
+				gitDir := filepath.Join(repoDir, ".git")
+				if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+					return filepath.SkipDir
+				}
+
+				// Get relative path from workspace root
+				relPath, err := filepath.Rel(absPath, repoDir)
+				if err != nil || relPath == "." {
+					return filepath.SkipDir
+				}
+
+				// Get remote URL
+				urlCmd := exec.Command("git", "remote", "get-url", "origin")
+				urlCmd.Dir = repoDir
+				urlOutput, err := urlCmd.Output()
+				if err != nil {
+					utils.LogWarning(os.Stdout, "Failed to get remote URL for %s: %v", relPath, err)
+					return filepath.SkipDir
+				}
+				remoteURL := strings.TrimSpace(string(urlOutput))
+
+				// Get version (branch or hash)
+				var version string
+				if captureUseHash {
+					hashCmd := exec.Command("git", "rev-parse", "HEAD")
+					hashCmd.Dir = repoDir
+					hashOutput, err := hashCmd.Output()
+					if err != nil {
+						utils.LogWarning(os.Stdout, "Failed to get commit hash for %s: %v", relPath, err)
+						return filepath.SkipDir
+					}
+					version = strings.TrimSpace(string(hashOutput))
+				} else {
+					branchCmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+					branchCmd.Dir = repoDir
+					branchOutput, err := branchCmd.Output()
+					if err != nil {
+						utils.LogWarning(os.Stdout, "Failed to get branch name for %s: %v", relPath, err)
+						return filepath.SkipDir
+					}
+					version = strings.TrimSpace(string(branchOutput))
+				}
+
+				repos[relPath] = RepoConfig{
+					URL:     remoteURL,
+					Version: version,
+				}
+
+				utils.LogSuccess(os.Stdout, "Captured %s (%s @ %s)", relPath, remoteURL, version)
+				return filepath.SkipDir
+			}
+
+			return nil
+		})
+
+		if len(repos) == 0 {
+			utils.LogWarning(os.Stdout, "No valid fins packages found in workspace.")
+			return
+		}
+
+		// Build workspace.yaml content
+		config := WorkspacePullConfig{
+			Name:  workspaceName,
+			Repos: repos,
+		}
+
+		// Marshal to YAML
+		yamlData, err := yaml.Marshal(config)
+		if err != nil {
+			utils.LogError(os.Stdout, "Failed to marshal workspace config: %v", err)
+			return
+		}
+
+		// Write to file
+		if err := os.WriteFile(yamlPath, yamlData, 0644); err != nil {
+			utils.LogError(os.Stdout, "Failed to write workspace.yaml: %v", err)
+			return
+		}
+
+		utils.LogSuccess(os.Stdout, "workspace.yaml updated with %d repositories.", len(repos))
+	},
+}
+
 func init() {
-	workspaceCmd.AddCommand(workspaceAddCmd, workspaceListCmd, workspaceRemoveCmd, workspaceScanCmd, workspacePullCmd)
+	workspaceCaptureCmd.Flags().BoolVar(&captureUseHash, "hash", false, "Use commit hash instead of branch name")
+	workspaceCmd.AddCommand(workspaceAddCmd, workspaceListCmd, workspaceRemoveCmd, workspaceScanCmd, workspacePullCmd, workspaceCaptureCmd)
 	RootCmd.AddCommand(workspaceCmd)
 }
